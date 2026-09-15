@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install
+
+      # Rebuilding must reproduce the committed artifacts, so a contributor who
+      # edits src/ without running the build fails here instead of shipping a
+      # lib/ that no longer matches the source.
+      - name: Rebuild and check the committed build is current
+        run: |
+          npm run build
+          if ! git diff --quiet -- lib assets; then
+            echo "::error::lib/ or assets/ is stale. Run 'npm run build' and commit the result."
+            git --no-pager diff --stat -- lib assets
+            exit 1
+          fi
+
+      - name: Typecheck against the harness API
+        run: |
+          npm install --no-save \
+            @deepseek-ai/cordis \
+            @deepseek-ai/schemastery
+          git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git /tmp/dsh
+          npx tsc -p tsconfig.json
+
+      - name: Test the built package
+        run: node --test "tests/*.test.mjs"
+
+      - name: Verify the tarball ships every runtime file
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.txt
+          for f in lib/index.js lib/client.js lib/host/index.js \
+                   lib/client/index.js lib/client/brain.js lib/client/sheet.js \
+                   assets/spritesheet.png cordis.patch.yml; do
+            grep -q "$f" /tmp/pack.txt || { echo "::error::$f is missing from the tarball"; exit 1; }
+          done
