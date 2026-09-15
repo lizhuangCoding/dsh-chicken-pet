@@ -94,17 +94,21 @@ dsh plugin --profile web add /path/to/dsh-chicken-pet
 ```yaml
 - id: chicken-pet
   config:
-    corner: bottom-right   # top-left | top-right | bottom-left | bottom-right
-    marginX: 24            # 距角落的水平边距（px）
-    marginY: 24            # 距角落的垂直边距（px）
-    size: 128              # 渲染宽度（px），高度按 192:208 自动算
-    sound: true            # AI 答完时是否叫一声
-    volume: 0.85           # 音量 0-1
-    idleMinSec: 4          # 两次自主行为之间最短间隔（秒）
-    idleMaxSec: 12         # 最长间隔（秒）
-    liveliness: 0.75       # 活跃度 0-1：越高越闲不住
-    enabled: true          # 关掉就不显示
+    enabled: true         # 关掉就不显示
+    corner: bottom-right  # top-left | top-right | bottom-left | bottom-right
+    marginX: 24           # 距角落的水平边距（px）
+    marginY: 24           # 距角落的垂直边距（px）
+    size: 128             # 渲染宽度（px），高度按 192:208 自动算
+    sound: true           # AI 答完时是否叫一声
+    volume: 0.85          # 音量 0-1
+    idleMinSec: 4         # 两次自主行为之间最短间隔（秒）
+    idleMaxSec: 12        # 最长间隔（秒）
+    liveliness: 0.75      # 活跃度 0-1：越高越闲不住
+    serveAssets: true     # 提供精灵图路由；关掉就看不到鸡了
+    pollMs: 700           # Agent 状态轮询间隔（事件兜底）
 ```
+
+> 这些配置由 **Host 半**接收，再通过它的服务转交给浏览器半。原因是 bundle 补丁里那一行只加载 Host 半——浏览器半是 dsh 通过 `dsh.client` 声明自动发现的，拿不到本行 config。
 
 **想让鸡安静一点**：`liveliness: 0.2`、`idleMinSec: 15`。
 **想要一只多动症鸡**：`liveliness: 1`、`idleMinSec: 2`、`idleMaxSec: 5`。

@@ -146,19 +146,24 @@ interface SheetInfo {
   cols: number
   cellWidth: number
   cellHeight: number
+  /** Appearance and behaviour settings the host row supplied. */
+  pets?: Partial<Config>
 }
 
 /**
  * Mount the pet.
+ *
+ * Settings come from the host half's service rather than this half's own
+ * config: only the host row is composed from the profile patch, so a value
+ * placed on that row reaches the browser through here. The local `Config`
+ * remains as the fallback for a browser-half-only mount.
  * @param ctx - registrant context.
- * @param config - client-half configuration.
+ * @param config - fallback configuration for a host-less mount.
  * @returns nothing.
  */
 export function apply(ctx: Context, config: Config): void {
-  if (!config.enabled) return
-  if (typeof document === 'undefined') return
-
-  const sheet = (ctx.get('chickenPetSheet') as SheetInfo | undefined) ?? {
+  const service = ctx.get('chickenPetSheet') as SheetInfo | undefined
+  const sheet = service ?? {
     // Fallback keeps the pet usable when the host half is absent: the sheet is
     // served by the same origin at a stable path.
     url: '/chicken-pet/spritesheet.png',
@@ -167,6 +172,11 @@ export function apply(ctx: Context, config: Config): void {
     cellWidth: CELL.w,
     cellHeight: CELL.h,
   }
+  // Host-supplied values win; the local config covers a host-less mount.
+  const settings: Config = { ...config, ...service?.pets }
+
+  if (!settings.enabled) return
+  if (typeof document === 'undefined') return
 
   const style = document.createElement('style')
   style.textContent = STYLES
@@ -183,25 +193,25 @@ export function apply(ctx: Context, config: Config): void {
   root.appendChild(sprite)
   document.body.appendChild(root)
 
-  const scale = config.size / sheet.cellWidth
+  const scale = settings.size / sheet.cellWidth
   const height = Math.round(sheet.cellHeight * scale)
-  sprite.style.width = `${config.size}px`
+  sprite.style.width = `${settings.size}px`
   sprite.style.height = `${height}px`
   sprite.style.backgroundImage = `url("${sheet.url}?v=${sheet.hash}")`
-  sprite.style.backgroundSize = `${config.size * sheet.cols}px auto`
+  sprite.style.backgroundSize = `${settings.size * sheet.cols}px auto`
 
   const cornerStyles: Record<Config['corner'], Partial<CSSStyleDeclaration>> = {
-    'top-left': { left: `${config.marginX}px`, top: `${config.marginY}px` },
-    'top-right': { right: `${config.marginX}px`, top: `${config.marginY}px` },
-    'bottom-left': { left: `${config.marginX}px`, bottom: `${config.marginY}px` },
-    'bottom-right': { right: `${config.marginX}px`, bottom: `${config.marginY}px` },
+    'top-left': { left: `${settings.marginX}px`, top: `${settings.marginY}px` },
+    'top-right': { right: `${settings.marginX}px`, top: `${settings.marginY}px` },
+    'bottom-left': { left: `${settings.marginX}px`, bottom: `${settings.marginY}px` },
+    'bottom-right': { right: `${settings.marginX}px`, bottom: `${settings.marginY}px` },
   }
-  Object.assign(root.style, cornerStyles[config.corner])
+  Object.assign(root.style, cornerStyles[settings.corner])
 
   const autonomy: AutonomyConfig = {
-    idleMinMs: config.idleMinSec * 1000,
-    idleMaxMs: Math.max(config.idleMinSec, config.idleMaxSec) * 1000,
-    liveliness: config.liveliness,
+    idleMinMs: settings.idleMinSec * 1000,
+    idleMaxMs: Math.max(settings.idleMinSec, settings.idleMaxSec) * 1000,
+    liveliness: settings.liveliness,
     celebrateMs: 2600,
     reactMs: 1400,
   }
@@ -226,7 +236,7 @@ export function apply(ctx: Context, config: Config): void {
    * @returns nothing.
    */
   const paint = (row: number, frame: number): void => {
-    const x = -frame * config.size
+    const x = -frame * settings.size
     const y = -row * height
     sprite.style.backgroundPosition = `${x}px ${y}px`
   }
@@ -291,7 +301,7 @@ export function apply(ctx: Context, config: Config): void {
    * @returns nothing.
    */
   const chirp = (): void => {
-    if (!config.sound) return
+    if (!settings.sound) return
     try {
       const Ctor = window.AudioContext
         ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -306,7 +316,7 @@ export function apply(ctx: Context, config: Config): void {
       osc.frequency.exponentialRampToValueAtTime(1480, start + 0.07)
       osc.frequency.exponentialRampToValueAtTime(1040, start + 0.16)
       gain.gain.setValueAtTime(0.0001, start)
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, config.volume * 0.22), start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, settings.volume * 0.22), start + 0.02)
       gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22)
       osc.connect(gain)
       gain.connect(audio.destination)
@@ -440,9 +450,9 @@ export function apply(ctx: Context, config: Config): void {
     const dx = event.clientX - dragState.x
     const dy = event.clientY - dragState.y
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true
-    const maxLeft = window.innerWidth - config.size
+    const maxLeft = window.innerWidth - settings.size
     const maxTop = window.innerHeight - height
-    const left = Math.min(Math.max(dragState.left + dx, -config.size * 0.3), maxLeft)
+    const left = Math.min(Math.max(dragState.left + dx, -settings.size * 0.3), maxLeft)
     const top = Math.min(Math.max(dragState.top + dy, 0), maxTop)
     root.style.left = `${left}px`
     root.style.top = `${top}px`

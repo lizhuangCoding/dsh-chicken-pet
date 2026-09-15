@@ -27,15 +27,50 @@ export const inject = ['webServer']
 
 /** Host-half configuration. */
 export interface Config {
-  /** Serve the spritesheet route. Turn off to run the pet with a cached sheet only. */
+  /** Serve the spritesheet route. */
   serveAssets: boolean
   /** Poll interval for the agent-state fallback, in milliseconds. */
   pollMs: number
+  /** Whether the pet is shown at all. */
+  enabled: boolean
+  /** Resting corner before the user drags it. */
+  corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+  /** Horizontal margin from the corner, in CSS pixels. */
+  marginX: number
+  /** Vertical margin from the corner, in CSS pixels. */
+  marginY: number
+  /** Rendered width in CSS pixels; height follows the cell aspect ratio. */
+  size: number
+  /** Play a short chirp when the agent answers. */
+  sound: boolean
+  /** Chirp volume, 0 to 1. */
+  volume: number
+  /** Shortest gap between idle behaviour rolls, in seconds. */
+  idleMinSec: number
+  /** Longest gap between idle behaviour rolls, in seconds. */
+  idleMaxSec: number
+  /** How often the chicken does something rather than standing still, 0 to 1. */
+  liveliness: number
 }
 
 export const Config: z<Config> = z.object({
   serveAssets: z.boolean().default(true),
   pollMs: z.number().step(1).min(200).max(10000).default(700),
+  enabled: z.boolean().default(true),
+  corner: z.union([
+    z.const('top-left'),
+    z.const('top-right'),
+    z.const('bottom-left'),
+    z.const('bottom-right'),
+  ]).default('bottom-right'),
+  marginX: z.number().min(0).max(2000).default(24),
+  marginY: z.number().min(0).max(2000).default(24),
+  size: z.number().min(48).max(512).default(128),
+  sound: z.boolean().default(true),
+  volume: z.number().min(0).max(1).default(0.85),
+  idleMinSec: z.number().min(1).max(600).default(4),
+  idleMaxSec: z.number().min(1).max(600).default(12),
+  liveliness: z.number().min(0).max(1).default(0.75),
 })
 
 /**
@@ -122,5 +157,24 @@ export function apply(ctx: Context, config: Config): void {
     cellWidth: 192,
     /** Pixel height of one cell. */
     cellHeight: 208,
+    /**
+     * Appearance and behaviour settings for the browser half.
+     *
+     * These arrive here rather than as browser config because only the host
+     * row is composed from the profile patch; the browser half is discovered
+     * from the `dsh.client` declaration and receives no row config of its own.
+     */
+    pets: {
+      enabled: config.enabled,
+      corner: config.corner,
+      marginX: config.marginX,
+      marginY: config.marginY,
+      size: config.size,
+      sound: config.sound,
+      volume: config.volume,
+      idleMinSec: config.idleMinSec,
+      idleMaxSec: config.idleMaxSec,
+      liveliness: config.liveliness,
+    },
   })
 }

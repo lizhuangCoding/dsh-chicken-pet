@@ -69,7 +69,8 @@
     "sprites": "node scripts/build-sprites.mjs",
     "preview": "node scripts/preview-cli.mjs",
     "typecheck": "node scripts/typecheck.mjs",
-    "test": "npm run build && node --test \"tests/*.test.mjs\""
+    "test": "npm run build && node scripts/check-patch.mjs && node --test \"tests/*.test.mjs\"",
+    "verify": "node scripts/check-patch.mjs"
   },
   "devDependencies": {
     "@standard-schema/spec": "^1.1.0",

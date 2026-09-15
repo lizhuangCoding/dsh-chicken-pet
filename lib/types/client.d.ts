@@ -43,8 +43,13 @@ export interface Config {
 export declare const Config: z<Config>;
 /**
  * Mount the pet.
+ *
+ * Settings come from the host half's service rather than this half's own
+ * config: only the host row is composed from the profile patch, so a value
+ * placed on that row reaches the browser through here. The local `Config`
+ * remains as the fallback for a browser-half-only mount.
  * @param ctx - registrant context.
- * @param config - client-half configuration.
+ * @param config - fallback configuration for a host-less mount.
  * @returns nothing.
  */
 export declare function apply(ctx: Context, config: Config): void;

@@ -1,25 +1,46 @@
-# dsh-chicken-pet bundle patch: one browser plugin row over the profile root.
+# dsh-chicken-pet bundle patch: one plugin row over the profile root.
+#
+# The row names the BARE package, which loads the host half (`lib/index.js`)
+# as an ordinary Cordis plugin — that is what serves the spritesheet route.
+# The browser half is not mounted from here: `dsh.client.platform: web` in
+# package.json makes the Web app discover and load `./client` automatically.
+# Naming the `./client` subpath here instead would load browser code into the
+# host process, and the sprite route would never register.
+#
+# Appearance settings therefore travel through the host half, which publishes
+# them to the browser over its service. They are ordinary config fields here.
 #
 # Applied after the shipped bundles, so the user's own cordis.patch.yml can
 # still address this row by id (`chicken-pet`) and replace its config.
 
 - insert:
     - id: chicken-pet
-      name: 'dsh-chicken-pet/client'
+      name: 'dsh-chicken-pet'
       config:
-        # Where the pet rests before the user drags it.
+        # The browser half cannot read files from the package directory, so
+        # this route is what makes the sprite reachable at all.
+        serveAssets: true
+
+        # ── appearance ────────────────────────────────────────────────────
+        enabled: true
+        # top-left | top-right | bottom-left | bottom-right
         corner: bottom-right
         marginX: 24
         marginY: 24
-        # Rendered width in CSS pixels; height follows the 192x208 cell ratio.
+        # Rendered width in CSS pixels; height follows the 192:208 cell ratio.
         size: 128
-        # Master switches.
-        enabled: true
+
+        # ── behaviour ─────────────────────────────────────────────────────
+        # Chirp when the agent finishes an answer.
         sound: true
-        # Idle autonomy: seconds between behaviour rolls, and how lively the
-        # chicken is (0 = rarely moves, 1 = constantly busy).
+        volume: 0.85
+        # Gap between autonomous behaviours, in seconds.
         idleMinSec: 4
         idleMaxSec: 12
+        # 0 = a very calm chicken, 1 = never sits still.
         liveliness: 0.75
-        # Volume of the cheer, 0-1.
-        volume: 0.85
+
+        # ── reliability ───────────────────────────────────────────────────
+        # Agent-state polling interval; the fallback used when agent events do
+        # not reach plugin listeners in this deployment.
+        pollMs: 700

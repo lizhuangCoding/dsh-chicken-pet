@@ -18,10 +18,30 @@ export declare const name = "chicken-pet-host";
 export declare const inject: string[];
 /** Host-half configuration. */
 export interface Config {
-    /** Serve the spritesheet route. Turn off to run the pet with a cached sheet only. */
+    /** Serve the spritesheet route. */
     serveAssets: boolean;
     /** Poll interval for the agent-state fallback, in milliseconds. */
     pollMs: number;
+    /** Whether the pet is shown at all. */
+    enabled: boolean;
+    /** Resting corner before the user drags it. */
+    corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    /** Horizontal margin from the corner, in CSS pixels. */
+    marginX: number;
+    /** Vertical margin from the corner, in CSS pixels. */
+    marginY: number;
+    /** Rendered width in CSS pixels; height follows the cell aspect ratio. */
+    size: number;
+    /** Play a short chirp when the agent answers. */
+    sound: boolean;
+    /** Chirp volume, 0 to 1. */
+    volume: number;
+    /** Shortest gap between idle behaviour rolls, in seconds. */
+    idleMinSec: number;
+    /** Longest gap between idle behaviour rolls, in seconds. */
+    idleMaxSec: number;
+    /** How often the chicken does something rather than standing still, 0 to 1. */
+    liveliness: number;
 }
 export declare const Config: z<Config>;
 /**
