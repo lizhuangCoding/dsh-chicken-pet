@@ -18,9 +18,8 @@ jobs:
 
       - run: npm install
 
-      # Rebuilding must reproduce the committed artifacts, so a contributor who
-      # edits src/ without running the build fails here instead of shipping a
-      # lib/ that no longer matches the source.
+      # The committed lib/ is what makes `github:` installs work without a
+      # build step, so it must stay in sync with src/.
       - name: Rebuild and check the committed build is current
         run: |
           npm run build
@@ -30,17 +29,18 @@ jobs:
             exit 1
           fi
 
+      # Checking against the real harness sources is what catches an event
+      # name or service key that the harness does not actually declare.
       - name: Typecheck against the harness API
         run: |
-          npm install --no-save \
-            @deepseek-ai/cordis \
-            @deepseek-ai/schemastery
           git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git /tmp/dsh
-          npx tsc -p tsconfig.json
+          DSH_CHECKOUT=/tmp/dsh npm run typecheck
 
       - name: Test the built package
         run: node --test "tests/*.test.mjs"
 
+      # The defect that made an earlier revision install but not run was a
+      # `files` list that omitted the runtime modules, visible only here.
       - name: Verify the tarball ships every runtime file
         run: |
           npm pack --dry-run 2>&1 | tee /tmp/pack.txt
