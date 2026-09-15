@@ -35,6 +35,25 @@ const PLUGIN_ID = pkg.name
 const CLIENT_ENTRY = 'client/index.ts'
 
 /**
+ * Specifiers the shell answers from its own module table.
+ *
+ * These must NOT be inlined. React in particular has to be the shell's single
+ * instance: a second copy would give the settings card hooks bound to a
+ * different dispatcher than the renderer that calls it.
+ */
+const PLATFORM_EXTERNALS = new Set([
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
+  '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
+  '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-ui-primitives',
+  '@deepseek-ai/dsh-client-ui-dockkit',
+])
+
+/**
  * Read a source module and strip its TypeScript-only syntax.
  *
  * These sources use a deliberately small subset — type annotations, interfaces,
@@ -130,14 +149,38 @@ function toFactoryBody(source, file) {
     out = out.replace(imp.source, lines.join('\n'))
   }
 
+  // Re-exports (`export { a } from './b'`) both bind the name and forward it.
+  // They must be turned into a require plus an export entry: leaving the form
+  // in place emits ES module syntax, which is a SyntaxError in the browser and
+  // fails registration for every plugin in the batch.
+  const reExports = []
+  out = out.replace(
+    /^\s*export\s*\{([^}]*)\}\s*from\s*'([^']+)'\s*;?\s*$/gm,
+    (_match, names, specifier) => {
+      const key = specifier.startsWith('.')
+        ? `./${relative(join(root, 'lib'), resolve(dir, specifier)).replace(/\\/g, '/')}`
+        : specifier
+      deps.push({ key, isRelative: specifier.startsWith('.'), specifier, file })
+      const local = `__re_${reExports.length}`
+      for (const part of names.split(',')) {
+        const trimmed = part.trim()
+        if (trimmed === '') continue
+        const [orig, alias] = trimmed.split(/\s+as\s+/).map(t => t.trim())
+        reExports.push(alias === undefined ? orig : `${orig}: ${alias}`)
+      }
+      return `const ${local} = __require(${JSON.stringify(key)});`
+    },
+  )
+
   const exports = parseExports(source)
   out = out
     .replace(/^\s*export\s+(?:async\s+)?(?:function|class|const|let|var)\s+/gm, (m) => m.replace('export ', ''))
     .replace(/^\s*export\s*\{[^}]*\}\s*;?\s*$/gm, '')
     .replace(/^\s*export\s+default\s+/gm, 'exports.default = ')
 
-  if (exports.named.length > 0) {
-    out += `\nObject.assign(exports, { ${exports.named.join(', ')} });\n`
+  const forwarded = [...exports.named, ...reExports]
+  if (forwarded.length > 0) {
+    out += `\nObject.assign(exports, { ${forwarded.join(', ')} });\n`
   }
 
   return { body: out, deps }

@@ -94,6 +94,9 @@ test('the host half registers its route and serves the sheet', async () => {
     effect: fn => fn(),
     webServer: { register: route => { routes.push(route); return () => {} } },
     provide: (name, value) => { provided = { name, value } },
+    // The settings namespace registers through `inject`; a deployment without a
+    // settings provider never runs the callback, which is why this is optional.
+    inject: () => {},
   }
   host.apply(ctx, host.Config({}))
 

@@ -76,7 +76,15 @@ test('the factory resolves through the injected require, not globals', () => {
   assert.equal(typeof exports, 'object')
   assert.equal(exports.name, 'chicken-pet', 'the plugin name must survive bundling')
   assert.equal(typeof exports.apply, 'function', 'the plugin must export apply')
-  assert.ok(Array.isArray(exports.inject), 'the plugin must export an inject list')
+  // `inject` is an object with optional entries: the pet draws without any
+  // service, and the settings card registers only when the settings page is
+  // present, so every dependency is optional.
+  assert.equal(typeof exports.inject, 'object', 'the plugin must export an inject declaration')
+  assert.ok(Array.isArray(exports.inject.optional), 'optional services are declared in inject.optional')
+  assert.ok(
+    exports.inject.optional.includes('slots'),
+    'the settings card needs the slot registry when it is available',
+  )
   assert.equal(
     exports.Config,
     undefined,

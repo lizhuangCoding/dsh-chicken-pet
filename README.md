@@ -87,33 +87,50 @@ dsh plugin --profile web add /path/to/dsh-chicken-pet
 
 ---
 
-## 配置
+## 配置（在 dsh 设置页里改）
 
-改 `$DSH_HOME/profiles/web/cordis.patch.yml`，按 id 覆盖这一行的配置：
+**不用编辑任何文件。** 打开 dsh 的 **设置 → 插件配置**，会看到一张「🐔 小鸡桌宠」卡片：
+
+| 选项 | 说明 |
+|---|---|
+| 显示桌宠 | 关掉后小鸡从界面消失，设置保留 |
+| **活跃度** | 0 = 几乎不动，1 = 一刻不停 |
+| 最短/最长间隔 | 两次自主行为之间的秒数 |
+| 大小 | 渲染宽度（像素） |
+| 停靠角落 | 四个角任选 |
+| 叫声 | AI 每答完一段是否叫一声 |
+| 音量 | 0 ~ 1 |
+
+**保存后立刻生效**，不用重启。改过的字段旁边会出现「重置」按钮，点一下恢复默认。
+
+<p align="center">
+  <img src="docs/settings-card.png" alt="设置页里的桌宠卡片" width="520">
+</p>
+
+### 活跃度参考值
+
+实测（浏览器里跑 2 分钟统计发呆占比）：
+
+| 活跃度 | 发呆占比 | 感觉 |
+|---|---|---|
+| 0.1 | 69% | 大部分时间站着 |
+| 0.5 | 60% | 偶尔动动 |
+| **0.75** | **33%** | **默认，比较活泼** |
+| 0.95 | 23% | 基本不停 |
+
+### 高级：直接写配置文件
+
+设置页只是 `cordis.patch.yml` 的图形界面。想批量配置或做版本管理，可以直接写 `$DSH_HOME/profiles/web/cordis.patch.yml`：
 
 ```yaml
 - id: chicken-pet
   config:
-    enabled: true         # 关掉就不显示
-    corner: bottom-right  # top-left | top-right | bottom-left | bottom-right
-    marginX: 24           # 距角落的水平边距（px）
-    marginY: 24           # 距角落的垂直边距（px）
-    size: 128             # 渲染宽度（px），高度按 192:208 自动算
-    sound: true           # AI 答完时是否叫一声
-    volume: 0.85          # 音量 0-1
-    idleMinSec: 4         # 两次自主行为之间最短间隔（秒）
-    idleMaxSec: 12        # 最长间隔（秒）
-    liveliness: 0.75      # 活跃度 0-1：越高越闲不住
-    serveAssets: true     # 提供精灵图路由；关掉就看不到鸡了
-    pollMs: 700           # Agent 状态轮询间隔（事件兜底）
+    liveliness: 0.3
+    idleMinSec: 10
+    idleMaxSec: 30
 ```
 
-> 这些配置由 **Host 半**接收，再通过它的服务转交给浏览器半。原因是 bundle 补丁里那一行只加载 Host 半——浏览器半是 dsh 通过 `dsh.client` 声明自动发现的，拿不到本行 config。
-
-**想让鸡安静一点**：`liveliness: 0.2`、`idleMinSec: 15`。
-**想要一只多动症鸡**：`liveliness: 1`、`idleMinSec: 2`、`idleMaxSec: 5`。
-
----
+> ⚠️ dsh 的 patch 是**整块替换 config**，不是字段合并。这里没写的字段会回落到插件默认值（所以只写两项是安全的），但别指望它和设置页的改动叠加。
 
 ## 关于声音
 
@@ -147,7 +164,10 @@ dsh-chicken-pet/
 │   ├── index.ts            # bundle 包入口（无运行时代码，本体是 cordis.patch.yml）
 │   ├── host/index.ts       # Host 半：注册精灵图 HTTP 路由（带内容哈希缓存）
 │   └── client/
-│       ├── index.ts        # Client 半：DOM 渲染、拖动、点击、事件订阅、音效
+│       ├── index.ts        # Client 半入口：挂载桌宠 + 注册设置卡片
+│       ├── pet.ts          # 桌宠本体：DOM 渲染、拖动、点击、事件订阅、音效
+│       ├── card.ts         # 设置页卡片：8 个控件，读写设置命名空间
+│       ├── config.ts       # 配置类型、默认值、共享样式
 │       ├── brain.ts        # 自主行为引擎（纯状态机，零 DOM 依赖，可单独测试）
 │       └── sheet.ts        # 精灵图几何与帧时长表
 ├── scripts/
@@ -156,6 +176,7 @@ dsh-chicken-pet/
 │   ├── animations.mjs      # 20 行动画的姿势函数
 │   ├── build-sprites.mjs   # 生成 assets/spritesheet.png
 │   ├── build-plugin.mjs    # 用 tsc 编译到 lib/
+│   ├── bundle-client.mjs   # 把浏览器半打包成 dsh 要求的 __ModuleLoader__ 格式
 │   └── preview.mjs         # 渲染预览图到 docs/
 ├── assets/                 # spritesheet.png（生成物，已入库）
 ├── demo/index.html         # 独立演示页，不需要 DSH

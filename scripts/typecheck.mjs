@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -60,11 +60,17 @@ if (mine.length > 0) {
 }
 
 // Assert the events the runtime subscribes to are declared by the harness, so a
-// rename on either side fails here rather than silently at runtime.
-const source = readFileSync(join(root, 'src', 'client', 'index.ts'), 'utf8')
-const events = [...source.matchAll(/ctx\.on\('([^']+)'/g)].map(m => m[1])
+// rename on either side fails here rather than silently at runtime. The scan
+// covers every client module, because subscriptions can live in any of them.
+const clientDir = join(root, 'src', 'client')
+const events = []
+for (const entry of readdirSync(clientDir)) {
+  if (!entry.endsWith('.ts')) continue
+  const source = readFileSync(join(clientDir, entry), 'utf8')
+  for (const match of source.matchAll(/ctx\.on\('([^']+)'/g)) events.push(match[1])
+}
 if (events.length === 0) {
-  console.error('No subscribed events found in src/client/index.ts; the guard is not checking anything.')
+  console.error('No subscribed events found under src/client; the guard is not checking anything.')
   process.exit(1)
 }
 

@@ -63,6 +63,9 @@ const ENTRIES = [
   'src/client/index.ts',
   'src/client/brain.ts',
   'src/client/sheet.ts',
+  'src/client/config.ts',
+  'src/client/pet.ts',
+  'src/client/card.ts',
 ]
 
 // Runtime JavaScript. `--noCheck` skips resolving the harness packages, which
@@ -96,7 +99,7 @@ function rewriteSpecifiers(file) {
 }
 
 let rewritten = 0
-for (const rel of ['lib/index.js', 'lib/host/index.js', 'lib/client/index.js', 'lib/client/brain.js', 'lib/client/sheet.js']) {
+for (const rel of ['lib/index.js', 'lib/host/index.js', 'lib/client/index.js', 'lib/client/brain.js', 'lib/client/sheet.js', 'lib/client/config.js', 'lib/client/pet.js', 'lib/client/card.js']) {
   const abs = join(root, rel)
   if (existsSync(abs)) rewritten += rewriteSpecifiers(abs)
 }
@@ -139,6 +142,9 @@ for (const rel of [
   'lib/client/index.js',
   'lib/client/brain.js',
   'lib/client/sheet.js',
+  'lib/client/config.js',
+  'lib/client/pet.js',
+  'lib/client/card.js',
 ]) {
   const abs = join(root, rel)
   if (existsSync(abs)) manifest[rel] = statSync(abs).size

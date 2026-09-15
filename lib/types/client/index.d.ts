@@ -1,61 +1,33 @@
 /**
- * The browser half of the pet: a floating pixel chicken that reacts to the
- * agent and to the person using it.
+ * The browser half of the pet.
  *
- * Presentation is plain DOM rather than a slot-registered React component, so
- * the pet mounts identically in any surface that loads the plugin and owns no
- * layout slot. The chicken lives in a fixed-position, pointer-transparent host
- * element; only the sprite itself accepts pointer events, so it never blocks
- * the chat behind it.
+ * Two contributions live here. The pet itself is a fixed overlay that mounts as
+ * soon as the plugin loads. The settings card registers into the Web settings
+ * page under the namespace the host half serves, so users change the pet's
+ * behaviour from the interface rather than by editing YAML.
  *
- * The sprite is a CSS background positioned by row and column, which keeps the
- * animation loop to one style write per frame.
+ * Both are optional at runtime: a deployment without the settings services
+ * still gets the pet, and a browser half mounted without the host half falls
+ * back to its own defaults.
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { type Config } from './config.ts';
 /** Stable Cordis plugin name. */
 export declare const name = "chicken-pet";
-/** The pet needs no Cordis service; it reacts to agent events when they arrive. */
-export declare const inject: never[];
-/** Client-half configuration, as supplied by the host half over its service. */
-export interface Config {
-    /** Whether the pet is shown at all. */
-    enabled: boolean;
-    /** Resting corner before the user drags it. */
-    corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-    /** Horizontal margin from the corner, in CSS pixels. */
-    marginX: number;
-    /** Vertical margin from the corner, in CSS pixels. */
-    marginY: number;
-    /** Rendered width in CSS pixels; height follows the cell aspect ratio. */
-    size: number;
-    /** Play a short chirp when the agent answers. */
-    sound: boolean;
-    /** Chirp volume, 0 to 1. */
-    volume: number;
-    /** Shortest gap between idle behaviour rolls, in seconds. */
-    idleMinSec: number;
-    /** Longest gap between idle behaviour rolls, in seconds. */
-    idleMaxSec: number;
-    /** How often the chicken does something rather than standing still, 0 to 1. */
-    liveliness: number;
-}
 /**
- * Defaults used when no host half supplies settings.
+ * Services this half uses when present.
  *
- * These are plain values rather than a schema: the host validates user config
- * with schemastery, and this half only needs a fallback for a host-less mount.
- * Keeping the validator on the host is also what keeps `schemastery` out of the
- * browser bundle, which the shell cannot resolve.
- * @returns a complete configuration with every field defaulted.
+ * None are required: the pet draws with or without them, and the card simply
+ * does not register when the settings page is absent. Declaring them optional
+ * keeps the plugin usable in a minimal composition.
  */
-export declare function defaultConfig(): Config;
+export declare const inject: {
+    optional: string[];
+};
+export { defaultConfig } from './config.ts';
+export type { Config } from './config.ts';
 /**
- * Mount the pet.
- *
- * Settings come from the host half's service rather than this half's own
- * config: only the host row is composed from the profile patch, so a value
- * placed on that row reaches the browser through here. The local `Config`
- * remains as the fallback for a browser-half-only mount.
+ * Mount the pet and register its settings card.
  * @param ctx - registrant context.
  * @param config - fallback configuration for a host-less mount.
  * @returns nothing.
