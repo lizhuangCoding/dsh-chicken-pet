@@ -102,14 +102,18 @@ for (const rel of ['lib/index.js', 'lib/host/index.js', 'lib/client/index.js', '
 }
 if (rewritten > 0) process.stdout.write(`rewrote .ts specifiers in ${rewritten} emitted module(s)\n`)
 
-// The package advertises `lib/client.js` and `lib/index.js`, but tsc emits
-// `lib/client/index.js` and `lib/host/index.js` for directory entries.
-if (existsSync(join(root, 'lib', 'client', 'index.js'))) {
-  writeFileSync(join(root, 'lib', 'client.js'), "export * from './client/index.js'\n")
-}
+// The package advertises `lib/index.js`, but tsc emits `lib/host/index.js`
+// for a directory entry.
 if (existsSync(join(root, 'lib', 'host', 'index.js'))) {
   writeFileSync(join(root, 'lib', 'index.js'), "export * from './host/index.js'\n")
 }
+
+// lib/client.js is NOT a re-export. DSH executes the browser bundle as a plain
+// script, so it must be the bundled __ModuleLoader__ factory that
+// scripts/bundle-client.mjs emits. A re-export here is an ES module, which is a
+// SyntaxError in the browser and fails registration for every plugin in the
+// batch DSH serves.
+execFileSync(process.execPath, [join(here, 'bundle-client.mjs')], { stdio: 'inherit' })
 
 // Declaration pass, emitted separately so the runtime pass needs no d.ts work.
 runTsc([
@@ -143,6 +147,7 @@ for (const rel of [
 // A published module that still names a `.ts` specifier imports a file that
 // does not exist beside it and fails only once a user installs the plugin.
 for (const rel of Object.keys(manifest)) {
+  if (rel === 'lib/client.js') continue // bundled artifact: no relative imports
   const stray = readFileSync(join(root, rel), 'utf8').match(/from\s+'\.[^']*\.ts'/g)
   if (stray !== null) {
     console.error(`${rel}: emitted module still imports ${stray.join(', ')}`)
@@ -151,6 +156,7 @@ for (const rel of Object.keys(manifest)) {
 }
 // Every relative import in the emitted tree must resolve to a file that shipped.
 for (const rel of Object.keys(manifest)) {
+  if (rel === 'lib/client.js') continue // bundled artifact: no relative imports
   const dir = dirname(join(root, rel))
   for (const spec of readFileSync(join(root, rel), 'utf8').matchAll(/from\s+'(\.[^']*)'/g)) {
     const target = join(dir, spec[1])

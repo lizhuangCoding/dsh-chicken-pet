@@ -12,12 +12,11 @@
  * animation loop to one style write per frame.
  */
 import type { Context } from '@deepseek-ai/cordis';
-import z from '@deepseek-ai/schemastery';
 /** Stable Cordis plugin name. */
 export declare const name = "chicken-pet";
 /** The pet needs no Cordis service; it reacts to agent events when they arrive. */
 export declare const inject: never[];
-/** Client-half configuration; every deployment-varying choice lives here. */
+/** Client-half configuration, as supplied by the host half over its service. */
 export interface Config {
     /** Whether the pet is shown at all. */
     enabled: boolean;
@@ -33,14 +32,23 @@ export interface Config {
     sound: boolean;
     /** Chirp volume, 0 to 1. */
     volume: number;
-    /** Shortest gap between idle behaviour rolls, in milliseconds. */
+    /** Shortest gap between idle behaviour rolls, in seconds. */
     idleMinSec: number;
-    /** Longest gap between idle behaviour rolls, in milliseconds. */
+    /** Longest gap between idle behaviour rolls, in seconds. */
     idleMaxSec: number;
     /** How often the chicken does something rather than standing still, 0 to 1. */
     liveliness: number;
 }
-export declare const Config: z<Config>;
+/**
+ * Defaults used when no host half supplies settings.
+ *
+ * These are plain values rather than a schema: the host validates user config
+ * with schemastery, and this half only needs a fallback for a host-less mount.
+ * Keeping the validator on the host is also what keeps `schemastery` out of the
+ * browser bundle, which the shell cannot resolve.
+ * @returns a complete configuration with every field defaulted.
+ */
+export declare function defaultConfig(): Config;
 /**
  * Mount the pet.
  *
@@ -52,4 +60,4 @@ export declare const Config: z<Config>;
  * @param config - fallback configuration for a host-less mount.
  * @returns nothing.
  */
-export declare function apply(ctx: Context, config: Config): void;
+export declare function apply(ctx: Context, config?: Partial<Config>): void;

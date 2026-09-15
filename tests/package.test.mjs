@@ -122,18 +122,6 @@ test('the host half registers its route and serves the sheet', async () => {
   assert.equal(postStatus, 405)
 })
 
-test('the client half exposes the plugin shape and safe defaults', async () => {
-  const client = await import(join(root, 'lib', 'client.js'))
-  assert.equal(client.name, 'chicken-pet')
-  assert.equal(typeof client.apply, 'function')
-  const config = client.Config({})
-  assert.equal(config.enabled, true)
-  assert.equal(config.corner, 'bottom-right')
-  assert.ok(config.size > 0)
-  assert.ok(config.liveliness >= 0 && config.liveliness <= 1)
-  assert.ok(config.idleMaxSec >= config.idleMinSec, 'the idle window must not be inverted')
-})
-
 test('the autonomy engine runs without a DOM and varies its behaviour', async () => {
   const { ChickenBrain } = await import(join(root, 'lib', 'client', 'brain.js'))
   let now = 0

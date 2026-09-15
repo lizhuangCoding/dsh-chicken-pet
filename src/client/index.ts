@@ -13,11 +13,16 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
 // Type-only: these imports carry the declaration merges that make the
-// `tools/*` and `agent/*` event names, and `ctx.webServer`, known to the
-// compiler. They are erased at build time, so the plugin adds no runtime
-// dependency on the packages it observes.
+// `tools/*` and `agent/*` event names known to the compiler. They are erased at
+// build time, so the plugin adds no runtime dependency on the packages it
+// observes.
+//
+// `@deepseek-ai/schemastery` must NOT be imported as a value here. The browser
+// can only resolve the modules in the shell's platform table (react, cordis,
+// and a few `dsh-client-*` packages); a `require` for anything else throws at
+// load time, and because DSH serves plugin bundles as one combined request,
+// that failure unregisters every plugin in the batch.
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-agent'
 import {
@@ -35,7 +40,7 @@ export const name = 'chicken-pet'
 /** The pet needs no Cordis service; it reacts to agent events when they arrive. */
 export const inject = []
 
-/** Client-half configuration; every deployment-varying choice lives here. */
+/** Client-half configuration, as supplied by the host half over its service. */
 export interface Config {
   /** Whether the pet is shown at all. */
   enabled: boolean
@@ -51,31 +56,37 @@ export interface Config {
   sound: boolean
   /** Chirp volume, 0 to 1. */
   volume: number
-  /** Shortest gap between idle behaviour rolls, in milliseconds. */
+  /** Shortest gap between idle behaviour rolls, in seconds. */
   idleMinSec: number
-  /** Longest gap between idle behaviour rolls, in milliseconds. */
+  /** Longest gap between idle behaviour rolls, in seconds. */
   idleMaxSec: number
   /** How often the chicken does something rather than standing still, 0 to 1. */
   liveliness: number
 }
 
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(true),
-  corner: z.union([
-    z.const('top-left'),
-    z.const('top-right'),
-    z.const('bottom-left'),
-    z.const('bottom-right'),
-  ]).default('bottom-right'),
-  marginX: z.number().min(0).max(2000).default(24),
-  marginY: z.number().min(0).max(2000).default(24),
-  size: z.number().min(48).max(512).default(128),
-  sound: z.boolean().default(true),
-  volume: z.number().min(0).max(1).default(0.85),
-  idleMinSec: z.number().min(1).max(600).default(4),
-  idleMaxSec: z.number().min(1).max(600).default(12),
-  liveliness: z.number().min(0).max(1).default(0.75),
-})
+/**
+ * Defaults used when no host half supplies settings.
+ *
+ * These are plain values rather than a schema: the host validates user config
+ * with schemastery, and this half only needs a fallback for a host-less mount.
+ * Keeping the validator on the host is also what keeps `schemastery` out of the
+ * browser bundle, which the shell cannot resolve.
+ * @returns a complete configuration with every field defaulted.
+ */
+export function defaultConfig(): Config {
+  return {
+    enabled: true,
+    corner: 'bottom-right',
+    marginX: 24,
+    marginY: 24,
+    size: 128,
+    sound: true,
+    volume: 0.85,
+    idleMinSec: 4,
+    idleMaxSec: 12,
+    liveliness: 0.75,
+  }
+}
 
 /** Stylesheet installed once per plugin activation. */
 const STYLES = `
@@ -161,7 +172,7 @@ interface SheetInfo {
  * @param config - fallback configuration for a host-less mount.
  * @returns nothing.
  */
-export function apply(ctx: Context, config: Config): void {
+export function apply(ctx: Context, config?: Partial<Config>): void {
   const service = ctx.get('chickenPetSheet') as SheetInfo | undefined
   const sheet = service ?? {
     // Fallback keeps the pet usable when the host half is absent: the sheet is
@@ -172,8 +183,8 @@ export function apply(ctx: Context, config: Config): void {
     cellWidth: CELL.w,
     cellHeight: CELL.h,
   }
-  // Host-supplied values win; the local config covers a host-less mount.
-  const settings: Config = { ...config, ...service?.pets }
+  // Host-supplied values win; defaults cover a host-less mount.
+  const settings: Config = { ...defaultConfig(), ...config, ...service?.pets }
 
   if (!settings.enabled) return
   if (typeof document === 'undefined') return

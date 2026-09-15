@@ -167,7 +167,7 @@ dsh-chicken-pet/
 ```sh
 npm install
 npm run sprites     # 重新生成精灵图
-npm run build       # 编译到 lib/
+npm run build       # 编译 Host 半 + 打包浏览器半
 npm test            # 构建 + 冒烟测试（9 项）
 npm run typecheck   # 用真实 DSH 源码做类型检查
 npm run preview     # 重新渲染文档预览图
@@ -176,7 +176,11 @@ npx serve .         # 然后打开 /demo/index.html
 
 演示页不依赖 DSH，可以直接调活跃度、模拟各种 Agent 事件、看全部 20 个动作。
 
-`npm test` 检查的都是**只有发布后才会暴露**的问题：产物里是否残留 `.ts` 引用、包是否漏发运行时文件、精灵图路径在安装后的目录结构里是否仍能解析。这几类问题在本项目开发过程中真实发生过。
+`npm test` 检查的都是**只有发布后才会暴露**的问题，其中三项来自真实事故：
+
+- **合并包安全**：dsh 把同一批浏览器插件拼成**一个文件**下发。如果我的包里有语法错误，**后面所有插件都注册不上**，整个界面会崩——不只是桌宠不显示。
+- **产物格式**：浏览器半必须是 `window.__ModuleLoader__.load({id, factory})` 的闭包工厂，不能是 ES module。
+- **依赖白名单**：浏览器只能 `require` 平台表里的模块（react、cordis 等）。用到 `schemastery` 这类包会在加载时抛错。
 
 ---
 
