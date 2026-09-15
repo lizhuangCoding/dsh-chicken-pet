@@ -30,14 +30,20 @@
   "keywords": [
     "dsh",
     "dsh-plugin",
+    "dsh-pet",
     "deepseek-harness",
+    "deepseek",
     "desktop-pet",
     "pixel-art",
-    "chicken"
+    "pixel-pet",
+    "chicken",
+    "cordis",
+    "cordis-plugin",
+    "agent-companion"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/liuzhuang/dsh-chicken-pet.git"
+    "url": "git+https://github.com/lizhuangCoding/dsh-chicken-pet.git"
   },
   "engines": {
     "node": ">=20"
@@ -72,5 +78,9 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "homepage": "https://github.com/lizhuangCoding/dsh-chicken-pet#readme",
+  "bugs": {
+    "url": "https://github.com/lizhuangCoding/dsh-chicken-pet/issues"
   }
 }

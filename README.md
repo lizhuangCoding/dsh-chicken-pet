@@ -77,7 +77,7 @@
 
 ```sh
 # 从 GitHub 安装
-dsh plugin --profile web add "github:<你的用户名>/dsh-chicken-pet#main"
+dsh plugin --profile web add "github:lizhuangCoding/dsh-chicken-pet#main"
 
 # 或从本地目录安装（开发时用）
 dsh plugin --profile web add /path/to/dsh-chicken-pet
