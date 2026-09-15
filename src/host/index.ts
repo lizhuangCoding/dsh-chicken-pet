@@ -12,7 +12,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -41,18 +41,35 @@ export const Config: z<Config> = z.object({
 /**
  * Read the packaged spritesheet and its content hash.
  *
+ * The sheet is located from this module's own URL, which is the only anchor
+ * that survives being installed under a different package manager layout. The
+ * path depends on where the compiled file sits, and the package exposes the
+ * host half at both `lib/host/index.js` (source emit) and `lib/index.js` (the
+ * published re-export), so the search walks upward instead of assuming a depth.
+ *
  * The hash is returned to the client so a reload after a plugin upgrade cannot
  * serve a stale cached sheet.
  * @returns the PNG bytes, the hash, and the pixel dimensions.
+ * @throws when the sheet is missing from the installed package.
  */
 function loadSheet(): { bytes: Buffer; hash: string; width: number; height: number } {
-  const url = new URL('../../assets/spritesheet.png', import.meta.url)
-  const bytes = readFileSync(fileURLToPath(url))
-  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 16)
-  // PNG IHDR: width and height are big-endian uint32 at byte offsets 16 and 20.
-  const width = bytes.readUInt32BE(16)
-  const height = bytes.readUInt32BE(20)
-  return { bytes, hash, width, height }
+  const candidates = [
+    new URL('../../assets/spritesheet.png', import.meta.url),
+    new URL('../assets/spritesheet.png', import.meta.url),
+  ]
+  for (const url of candidates) {
+    if (!existsSync(fileURLToPath(url))) continue
+    const bytes = readFileSync(fileURLToPath(url))
+    const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 16)
+    // PNG IHDR: width and height are big-endian uint32 at byte offsets 16 and 20.
+    const width = bytes.readUInt32BE(16)
+    const height = bytes.readUInt32BE(20)
+    return { bytes, hash, width, height }
+  }
+  throw new Error(
+    'chicken-pet: assets/spritesheet.png is missing from the installed package; '
+    + 'reinstall the plugin or run `npm run build`.',
+  )
 }
 
 /**

@@ -76,6 +76,32 @@ runTsc([
   ...ENTRIES,
 ])
 
+/**
+ * Rewrite relative `.ts` specifiers in emitted JavaScript to `.js`.
+ *
+ * Sources import each other with explicit `.ts` extensions, which is the
+ * convention the DSH repository uses and what `allowImportingTsExtensions`
+ * permits. TypeScript 5.6 keeps those specifiers in the output, so without this
+ * pass the published module imports `./brain.ts`, which does not exist next to
+ * the compiled file and fails at import time inside the user's profile.
+ * @param file - absolute path of the emitted module.
+ * @returns the number of specifiers rewritten.
+ */
+function rewriteSpecifiers(file) {
+  const before = readFileSync(file, 'utf8')
+  const after = before.replace(/(\bfrom\s+')(\.[^']*)\.ts(')/g, '$1$2.js$3')
+  if (after === before) return 0
+  writeFileSync(file, after)
+  return 1
+}
+
+let rewritten = 0
+for (const rel of ['lib/index.js', 'lib/host/index.js', 'lib/client/index.js', 'lib/client/brain.js', 'lib/client/sheet.js']) {
+  const abs = join(root, rel)
+  if (existsSync(abs)) rewritten += rewriteSpecifiers(abs)
+}
+if (rewritten > 0) process.stdout.write(`rewrote .ts specifiers in ${rewritten} emitted module(s)\n`)
+
 // The package advertises `lib/client.js` and `lib/index.js`, but tsc emits
 // `lib/client/index.js` and `lib/host/index.js` for directory entries.
 if (existsSync(join(root, 'lib', 'client', 'index.js'))) {
@@ -113,6 +139,28 @@ for (const rel of [
   const abs = join(root, rel)
   if (existsSync(abs)) manifest[rel] = statSync(abs).size
 }
+
+// A published module that still names a `.ts` specifier imports a file that
+// does not exist beside it and fails only once a user installs the plugin.
+for (const rel of Object.keys(manifest)) {
+  const stray = readFileSync(join(root, rel), 'utf8').match(/from\s+'\.[^']*\.ts'/g)
+  if (stray !== null) {
+    console.error(`${rel}: emitted module still imports ${stray.join(', ')}`)
+    process.exit(1)
+  }
+}
+// Every relative import in the emitted tree must resolve to a file that shipped.
+for (const rel of Object.keys(manifest)) {
+  const dir = dirname(join(root, rel))
+  for (const spec of readFileSync(join(root, rel), 'utf8').matchAll(/from\s+'(\.[^']*)'/g)) {
+    const target = join(dir, spec[1])
+    if (!existsSync(target)) {
+      console.error(`${rel}: import "${spec[1]}" does not resolve to an emitted file`)
+      process.exit(1)
+    }
+  }
+}
+
 mkdirSync(join(root, 'lib'), { recursive: true })
 writeFileSync(join(root, 'lib', 'build-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
