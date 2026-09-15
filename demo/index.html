@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-chicken-pet · 独立演示</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: #2b2520;
+    background: #f6f3ee;
+  }
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid rgba(74, 58, 46, 0.12);
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .01em; }
+  header p { margin: 0; color: #6d6259; max-width: 60ch; }
+  main { padding: 24px 32px 48px; display: grid; gap: 28px; }
+  section h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #8a7d71;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid rgba(74, 58, 46, 0.1);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  button {
+    font: inherit;
+    padding: 7px 14px;
+    margin: 0 8px 8px 0;
+    border-radius: 8px;
+    border: 1px solid rgba(74, 58, 46, 0.18);
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+  }
+  button:hover { background: #faf7f2; border-color: rgba(74, 58, 46, 0.32); }
+  button.primary { background: #2b2520; color: #fff; border-color: #2b2520; }
+  button.primary:hover { background: #443a32; }
+  .stage {
+    position: relative;
+    height: 320px;
+    border-radius: 12px;
+    border: 1px solid rgba(74, 58, 46, 0.1);
+    background:
+      linear-gradient(180deg, #eef4f8 0%, #f7f4ef 62%, #ece5da 100%);
+    overflow: hidden;
+  }
+  .stage::after {
+    content: '把鸡拖到任意位置 · 点一下它会惊一下';
+    position: absolute;
+    left: 16px;
+    bottom: 12px;
+    font-size: 12px;
+    color: #a2958a;
+  }
+  .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card {
+    width: 132px;
+    text-align: center;
+    border: 1px solid rgba(74, 58, 46, 0.1);
+    border-radius: 10px;
+    padding: 8px 6px 10px;
+    background: #fff;
+  }
+  .card canvas { display: block; margin: 0 auto 6px; image-rendering: pixelated; }
+  .card span { font-size: 11.5px; color: #6d6259; }
+  .log {
+    font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #2b2520;
+    color: #e8e0d5;
+    border-radius: 10px;
+    padding: 12px 14px;
+    max-height: 190px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+  .log b { color: #ffcf7a; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+  label { display: inline-flex; align-items: center; gap: 7px; color: #6d6259; }
+  input[type=range] { width: 150px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐔 dsh-chicken-pet · 独立演示</h1>
+  <p>这个页面不依赖 DeepSeek Harness，直接驱动插件里的 <code>ChickenBrain</code> 与精灵图渲染，用来检查素材和自主行为是否符合预期。</p>
+</header>
+
+<main>
+  <section>
+    <h2>自主行为（不碰鼠标，看它自己动）</h2>
+    <div class="row" style="margin-bottom:14px">
+      <label>活跃度 <input id="liveliness" type="range" min="0" max="1" step="0.05" value="0.8"><span id="livelinessVal">0.80</span></label>
+      <button id="pause" class="primary">暂停自主行为</button>
+    </div>
+    <div class="stage" id="stage"></div>
+  </section>
+
+  <section>
+    <h2>模拟 Agent 事件</h2>
+    <div class="panel">
+      <button data-ev="agent-working">开始干活</button>
+      <button data-ev="agent-thinking">思考中</button>
+      <button data-ev="agent-waiting">等待审批</button>
+      <button data-ev="agent-answered">AI 回答完一句</button>
+      <button data-ev="turn-finished">任务完成</button>
+      <button data-ev="turn-failed">任务出错</button>
+      <button data-ev="poked">戳一下</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>全部 20 个动作</h2>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section>
+    <h2>状态日志</h2>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+
+<script type="module">
+import { ChickenBrain } from '../lib/client/brain.js'
+import { ROWS, rowIndex, CELL, COLS } from '../lib/client/sheet.js'
+
+const SHEET = '../assets/spritesheet.png'
+const logEl = document.getElementById('log')
+const log = (msg) => {
+  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  logEl.innerHTML += `<b>${t}</b>  ${msg}\n`
+  logEl.scrollTop = logEl.scrollHeight
+}
+
+/** Build one animated sprite element backed by the shared spritesheet. */
+function makeSprite(size) {
+  const el = document.createElement('div')
+  const h = Math.round(CELL.h * (size / CELL.w))
+  el.style.cssText = `width:${size}px;height:${h}px;background-image:url('${SHEET}');
+    background-size:${size * COLS}px auto;background-repeat:no-repeat;image-rendering:pixelated;`
+  let row = 0, frame = 0, timer
+  const paint = () => { el.style.backgroundPosition = `${-frame * size}px ${-row * h}px` }
+  const play = (name) => {
+    clearTimeout(timer)
+    row = rowIndex(name); frame = 0; paint()
+    const r = ROWS[row]
+    const step = () => {
+      frame = (frame + 1) % r.count; paint()
+      timer = setTimeout(step, r.frames[frame] ?? 140)
+    }
+    timer = setTimeout(step, r.frames[0] ?? 140)
+  }
+  return { el, play, stop: () => clearTimeout(timer), height: h }
+}
+
+// ---- interactive pet -------------------------------------------------------
+
+const stage = document.getElementById('stage')
+const pet = makeSprite(96)
+pet.el.style.cssText += 'position:absolute;right:20px;bottom:20px;cursor:grab;pointer-events:auto;'
+pet.el.title = '拖我 · 点我'
+const bubble = document.createElement('div')
+bubble.style.cssText = `position:absolute;right:20px;bottom:${20 + pet.height + 8}px;
+  padding:5px 10px;border-radius:12px;background:rgba(255,255,255,.97);border:1px solid rgba(74,58,46,.14);
+  box-shadow:0 4px 14px rgba(0,0,0,.13);font-size:12px;white-space:nowrap;opacity:0;transition:opacity .16s;`
+stage.append(pet.el, bubble)
+
+const brain = new ChickenBrain(
+  { idleMinMs: 2500, idleMaxMs: 8000, liveliness: 0.8, celebrateMs: 2600, reactMs: 1400 },
+  { setTimeout: (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id) }, now: () => Date.now() },
+)
+
+let bubbleTimer
+brain.subscribe(s => {
+  pet.play(s.animation)
+  log(`动作 → <b>${s.animation}</b>${s.text ? `　气泡「${s.text}」` : ''}`)
+  clearTimeout(bubbleTimer)
+  if (s.text) {
+    bubble.textContent = s.text
+    bubble.style.opacity = '1'
+    bubbleTimer = setTimeout(() => { bubble.style.opacity = '0' }, 3000)
+  } else bubble.style.opacity = '0'
+})
+
+// drag + poke
+let drag = null
+pet.el.addEventListener('pointerdown', e => {
+  const r = pet.el.getBoundingClientRect(), s = stage.getBoundingClientRect()
+  pet.el.style.left = `${r.left - s.left}px`; pet.el.style.top = `${r.top - s.top}px`
+  pet.el.style.right = ''; pet.el.style.bottom = ''
+  bubble.style.right = ''; bubble.style.left = `${r.left - s.left}px`
+  drag = { x: e.clientX, y: e.clientY, l: r.left - s.left, t: r.top - s.top, moved: false }
+  pet.el.setPointerCapture(e.pointerId)
+})
+pet.el.addEventListener('pointermove', e => {
+  if (!drag) return
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true
+  pet.el.style.left = `${drag.l + dx}px`; pet.el.style.top = `${drag.t + dy}px`
+  bubble.style.left = `${drag.l + dx}px`
+  bubble.style.bottom = `${parseFloat(pet.el.style.top) + pet.height + 8}px`
+})
+const endDrag = e => {
+  if (!drag) return
+  const moved = drag.moved; drag = null
+  if (!moved) brain.dispatch({ kind: 'poked' })
+}
+pet.el.addEventListener('pointerup', endDrag)
+pet.el.addEventListener('pointercancel', endDrag)
+
+// ---- event buttons ---------------------------------------------------------
+
+const EVENTS = {
+  'agent-working': { kind: 'agent-working' },
+  'agent-thinking': { kind: 'agent-thinking' },
+  'agent-waiting': { kind: 'agent-waiting' },
+  'agent-answered': { kind: 'answer-finished' },
+  'turn-finished': { kind: 'turn-finished' },
+  'turn-failed': { kind: 'turn-failed' },
+  'poked': { kind: 'poked' },
+}
+for (const btn of document.querySelectorAll('[data-ev]')) {
+  btn.onclick = () => {
+    const t = EVENTS[btn.dataset.ev]
+    brain.dispatch(t)
+    log(`事件 → <b>${btn.dataset.ev}</b>`)
+  }
+}
+
+// ---- liveliness slider -----------------------------------------------------
+
+const slider = document.getElementById('liveliness')
+const sliderVal = document.getElementById('livelinessVal')
+slider.oninput = () => {
+  const v = parseFloat(slider.value)
+  sliderVal.textContent = v.toFixed(2)
+  brain.config.liveliness = v
+}
+
+let paused = false
+document.getElementById('pause').onclick = e => {
+  paused = !paused
+  e.target.textContent = paused ? '恢复自主行为' : '暂停自主行为'
+  if (paused) { pet.stop(); log('已暂停自主行为') }
+  else { brain.dispatch({ kind: 'celebration-over' }); log('已恢复自主行为') }
+}
+
+// ---- gallery ---------------------------------------------------------------
+
+const grid = document.getElementById('grid')
+for (const row of ROWS) {
+  const card = document.createElement('div')
+  card.className = 'card'
+  const s = makeSprite(64)
+  card.append(s.el)
+  const label = document.createElement('span')
+  label.textContent = row.name
+  card.append(label)
+  grid.append(card)
+  s.play(row.name)
+}
+
+log('演示页已就绪，观察鸡自己动 20 秒。')
+</script>
+</body>
+</html>

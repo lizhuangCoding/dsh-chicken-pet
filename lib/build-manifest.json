@@ -1,0 +1,8 @@
+{
+  "lib/index.js": 32,
+  "lib/client.js": 34,
+  "lib/host/index.js": 3596,
+  "lib/client/index.js": 15941,
+  "lib/client/brain.js": 12372,
+  "lib/client/sheet.js": 2613
+}
