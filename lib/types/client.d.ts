@@ -15,15 +15,19 @@ import { type Config } from './config.ts';
 /** Stable Cordis plugin name. */
 export declare const name = "chicken-pet";
 /**
- * Services this half uses when present.
+ * Services this half needs before it activates.
  *
- * None are required: the pet draws with or without them, and the card simply
- * does not register when the settings page is absent. Declaring them optional
- * keeps the plugin usable in a minimal composition.
+ * Deliberately empty. Cordis gates activation on every declared name: a row
+ * whose service never appears stays `pending` forever, and the boot audit then
+ * reports an entry that did not activate, which fails Web startup. The pet
+ * needs no service to draw, so it declares none and reaches for the optional
+ * ones at runtime instead.
+ *
+ * `{ optional: [...] }` is NOT how to express this. Cordis reads `inject` as a
+ * map of service name to intercept config, so that object asks for a service
+ * literally named `optional` and the plugin waits forever.
  */
-export declare const inject: {
-    optional: string[];
-};
+export declare const inject: never[];
 export { defaultConfig } from './config.ts';
 export type { Config } from './config.ts';
 /**

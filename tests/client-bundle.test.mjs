@@ -76,14 +76,17 @@ test('the factory resolves through the injected require, not globals', () => {
   assert.equal(typeof exports, 'object')
   assert.equal(exports.name, 'chicken-pet', 'the plugin name must survive bundling')
   assert.equal(typeof exports.apply, 'function', 'the plugin must export apply')
-  // `inject` is an object with optional entries: the pet draws without any
-  // service, and the settings card registers only when the settings page is
-  // present, so every dependency is optional.
-  assert.equal(typeof exports.inject, 'object', 'the plugin must export an inject declaration')
-  assert.ok(Array.isArray(exports.inject.optional), 'optional services are declared in inject.optional')
-  assert.ok(
-    exports.inject.optional.includes('slots'),
-    'the settings card needs the slot registry when it is available',
+  // `inject` must be an EMPTY array. Cordis gates activation on every declared
+  // name, and an entry whose service never appears stays pending forever and
+  // fails Web startup. The pet draws without any service, so it declares none
+  // and reaches for the optional ones through `ctx.inject` at runtime. An
+  // object here (`{ optional: [...] }`) is read as a service NAME, not a
+  // modifier, which is the mistake that broke a real boot.
+  assert.ok(Array.isArray(exports.inject), 'inject must be an array of required service names')
+  assert.deepEqual(
+    exports.inject,
+    [],
+    'the pet requires no service; a required dependency only risks leaving the row pending',
   )
   assert.equal(
     exports.Config,
@@ -106,11 +109,17 @@ test('the bundled plugin applies against a stub context without throwing', () =>
 
   // A host-less mount has no DOM, so `apply` must return before touching it.
   const listeners = new Map()
+  const injected = []
   const ctx = {
     get: () => undefined,
     on: (event, handler) => { listeners.set(event, handler); return () => listeners.delete(event) },
     effect: fn => fn(),
+    // The optional dependencies are requested this way; a stub that omitted it
+    // would hide a crash on startup.
+    inject: (deps, callback) => { injected.push([deps, callback]) },
   }
   exports.apply(ctx, config)
+  assert.equal(injected.length, 1, 'the settings card registers through ctx.inject')
+  assert.deepEqual(injected[0][0], ['slots', 'settingsScope'])
   assert.equal(listeners.size, 0, 'no listeners are registered without a document to draw into')
 })

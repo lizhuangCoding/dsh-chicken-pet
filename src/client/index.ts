@@ -20,13 +20,19 @@ import { mountPet, type SheetInfo } from './pet.ts'
 export const name = 'chicken-pet'
 
 /**
- * Services this half uses when present.
+ * Services this half needs before it activates.
  *
- * None are required: the pet draws with or without them, and the card simply
- * does not register when the settings page is absent. Declaring them optional
- * keeps the plugin usable in a minimal composition.
+ * Deliberately empty. Cordis gates activation on every declared name: a row
+ * whose service never appears stays `pending` forever, and the boot audit then
+ * reports an entry that did not activate, which fails Web startup. The pet
+ * needs no service to draw, so it declares none and reaches for the optional
+ * ones at runtime instead.
+ *
+ * `{ optional: [...] }` is NOT how to express this. Cordis reads `inject` as a
+ * map of service name to intercept config, so that object asks for a service
+ * literally named `optional` and the plugin waits forever.
  */
-export const inject = { optional: ['slots', 'settingsScope'] }
+export const inject = []
 
 export { defaultConfig } from './config.ts'
 export type { Config } from './config.ts'
@@ -42,12 +48,14 @@ export function apply(ctx: Context, config?: Partial<Config>): void {
 
   mountPet(ctx, service, { ...defaultConfig(), ...config })
 
-  // The scope is provided by the settings domain; without it there is no card
-  // to register and no way to write a change.
-  const settingsScope = ctx.get('settingsScope') as {
-    bind(spec: { namespace: string }): unknown
-  } | undefined
-  if (settingsScope !== undefined) {
-    installCard(ctx, settingsScope.bind({ namespace: SETTINGS_NAMESPACE }) as never)
-  }
+  // The card needs the slot registry and the settings scope together. Asking
+  // for both through `ctx.inject` waits until they exist without holding up the
+  // pet itself, which is why these dependencies are declared here rather than on
+  // the plugin.
+  ctx.inject(['slots', 'settingsScope'], (ready) => {
+    const scope = (ready as unknown as {
+      settingsScope: { bind(spec: { namespace: string }): unknown }
+    }).settingsScope
+    installCard(ready, scope.bind({ namespace: SETTINGS_NAMESPACE }) as never)
+  })
 }
