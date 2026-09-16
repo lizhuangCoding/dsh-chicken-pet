@@ -285,6 +285,34 @@ export function mountPet(
     if (trigger.kind === 'answer-finished' && brain.snapshot().mode === 'reacting') chirp()
   }
 
+  // ---- diagnostics --------------------------------------------------------
+
+  /**
+   * Whether the pet logs what it observes.
+   *
+   * Enabled by `localStorage.setItem('chicken-pet:debug', '1')` and a reload.
+   * A user reporting "the pet did not react" otherwise has nothing to look at:
+   * the interesting events are silent by design, and the browser console shows
+   * nothing about what arrived or what it drove.
+   */
+  const debug = (): boolean => {
+    try {
+      return window.localStorage?.getItem('chicken-pet:debug') === '1'
+    } catch {
+      // A sandboxed frame can deny storage access; diagnostics are optional.
+      return false
+    }
+  }
+
+  /**
+   * Log one observation when tracing is on.
+   * @param message - what happened.
+   * @returns nothing.
+   */
+  const trace = (message: string): void => {
+    if (debug()) console.info(`[chicken-pet] ${message}`)
+  }
+
   // ---- agent observation --------------------------------------------------
 
   // Events are the accurate source. `tools/execute` brackets real work, so it
@@ -293,6 +321,8 @@ export function mountPet(
 
   ctx.effect(() => ctx.on('tools/execute', (_exec, next) => {
     toolsInFlight++
+    markEventSeen()
+    trace(`tools/execute → 开始干活 (同时执行 ${toolsInFlight} 个)`)
     push({ kind: 'agent-working' })
     let result: unknown
     try {
@@ -304,10 +334,12 @@ export function mountPet(
     void Promise.resolve(result).then(
       () => {
         toolsInFlight = Math.max(0, toolsInFlight - 1)
+        trace(`tools/execute → 工具成功结束 (还剩 ${toolsInFlight} 个)`)
         if (toolsInFlight === 0) push({ kind: 'agent-thinking' })
       },
       () => {
         toolsInFlight = Math.max(0, toolsInFlight - 1)
+        trace(`tools/execute → 工具失败结束 (还剩 ${toolsInFlight} 个)`)
         if (toolsInFlight === 0) push({ kind: 'agent-thinking' })
       },
     )
@@ -318,11 +350,15 @@ export function mountPet(
     // A committed end frame is exactly "the model finished one answer", which
     // is finer-grained than a whole turn and is what drives the chirp.
     if (frame.type === 'end' && frame.outcome.kind === 'committed') {
+      markEventSeen()
+      trace('agent/assistant-stream → AI 答完一段，试着叫一声')
       push({ kind: 'answer-finished' })
     }
   }))
 
   ctx.effect(() => ctx.on('agent/request-error', (_payload, next) => {
+    markEventSeen()
+    trace('agent/request-error → 请求出错')
     push({ kind: 'turn-failed' })
     // Delegate: this listener observes the failure and must not own recovery.
     return next()
@@ -330,11 +366,17 @@ export function mountPet(
 
   // Polling is the fallback: an event dispatched on a bus this deployment does
   // not forward would otherwise leave the pet stuck in a working pose forever.
+  //
+  // It drives the pet only until an agent event proves the event path live. The
+  // flag below is set by those events alone: wiring it to the brain's own
+  // subscription would let the pet's first idle blink disable the fallback
+  // before any agent event had been given a chance to arrive.
   const agents = ctx.get('agents') as { list(): { status?: string }[] } | undefined
-  let sawEvent = false
-  const offEventSeen = brain.subscribe(() => { sawEvent = true })
+  let sawAgentEvent = false
+  const markEventSeen = (): void => { sawAgentEvent = true }
 
   if (agents !== undefined) {
+    trace('轮询兜底已启用（每 700ms 检查 agent 状态）')
     let previousRunning = false
     const poll = window.setInterval(() => {
       let running = false
@@ -347,14 +389,18 @@ export function mountPet(
       }
       if (running === previousRunning) return
       previousRunning = running
-      // Only drive from polling while events have never arrived; once the event
-      // path proves live it stays authoritative and polling just tracks state.
-      if (!sawEvent) push({ kind: running ? 'agent-working' : 'turn-finished' })
-      else if (!running) push({ kind: 'turn-finished' })
+      if (!sawAgentEvent) {
+        trace(`轮询 → agent ${running ? '开始运行' : '停止运行'}（事件从未送达，由轮询驱动）`)
+        push({ kind: running ? 'agent-working' : 'turn-finished' })
+      } else if (!running) {
+        trace('轮询 → agent 停止运行')
+        push({ kind: 'turn-finished' })
+      }
     }, 700)
     ctx.effect(() => () => window.clearInterval(poll))
+  } else {
+    trace('没有 agents 服务，轮询兜底不可用')
   }
-  ctx.effect(() => offEventSeen)
 
   // ---- interaction --------------------------------------------------------
 
