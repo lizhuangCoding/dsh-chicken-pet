@@ -337,7 +337,14 @@ export function installCard(ctx: Context, scope: SettingsScope): void {
     inject(key: string, callback: () => () => void): () => void
   } | undefined
 
-  if (slots === undefined) return
+  if (slots === undefined) {
+    console.warn('[chicken-pet] slot registry is absent; no settings card')
+    return
+  }
+  if (typeof slots.inject !== 'function') {
+    console.warn('[chicken-pet] slot registry has no inject(); the card cannot wait for the settings page')
+    return
+  }
 
   // `key` is the namespace the host serves; the page dispatches on it.
   //

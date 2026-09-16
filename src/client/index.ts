@@ -54,8 +54,13 @@ export function apply(ctx: Context, config?: Partial<Config>): void {
   // the plugin.
   ctx.inject(['slots', 'settingsScope'], (ready) => {
     const scope = (ready as unknown as {
-      settingsScope: { bind(spec: { namespace: string }): unknown }
+      settingsScope?: { bind(spec: { namespace: string }): unknown }
     }).settingsScope
+    if (scope === undefined) {
+      console.warn('[chicken-pet] settingsScope binding is unavailable; no settings card')
+      return
+    }
+    console.info('[chicken-pet] settings card registering')
     installCard(ready, scope.bind({ namespace: SETTINGS_NAMESPACE }) as never)
   })
 }
