@@ -66,6 +66,7 @@ const ENTRIES = [
   'src/client/config.ts',
   'src/client/pet.ts',
   'src/client/card.ts',
+  'src/client/card-styles.ts',
 ]
 
 // Runtime JavaScript. `--noCheck` skips resolving the harness packages, which
@@ -144,7 +145,7 @@ for (const rel of [
   'lib/client/sheet.js',
   'lib/client/config.js',
   'lib/client/pet.js',
-  'lib/client/card.js',
+  'lib/client/card.js', 'lib/client/card-styles.js',
 ]) {
   const abs = join(root, rel)
   if (existsSync(abs)) manifest[rel] = statSync(abs).size

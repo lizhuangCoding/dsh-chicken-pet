@@ -288,3 +288,47 @@ test('the card uses the shell icon rather than a drawn svg', () => {
     'the card must not draw its own svg; the shell icon carries its own size',
   )
 })
+
+test('the card geometry matches the shipped card', () => {
+  // The card sits in a list of shipped cards, so a few pixels of extra padding
+  // or a larger radius makes it read as a different component. These values are
+  // copied from the section's own stylesheet; changing one here without changing
+  // the original is what this asserts against.
+  const source = readFileSync(join(root, 'src', 'client', 'card-styles.ts'), 'utf8')
+  const rule = selector => {
+    const at = source.indexOf(selector)
+    assert.notEqual(at, -1, `${selector} must exist`)
+    return source.slice(at, source.indexOf('}', at))
+  }
+  const expect = (block, declaration) => {
+    assert.ok(block.includes(declaration), `expected ${declaration} in:\n${block}`)
+  }
+
+  const card = rule('.cdpc {')
+  expect(card, 'border: 0.5px solid var(--dsw-alias-border-l4)')
+  expect(card, 'border-radius: 16px')
+  expect(card, 'background: var(--dsw-alias-bg-layer-3)')
+
+  const head = rule('.cdpc-head {')
+  expect(head, 'gap: 12px')
+  expect(head, 'padding: 14px 16px')
+
+  const headtext = rule('.cdpc-headtext {')
+  expect(headtext, 'flex: 1')
+  expect(headtext, 'min-width: 0')
+  expect(headtext, 'flex-direction: column')
+  expect(headtext, 'gap: 4px')
+
+  const name = rule('.cdpc-name {')
+  expect(name, 'font-size: 15px')
+  expect(name, 'font-weight: 600')
+  expect(name, 'line-height: 1.4')
+
+  const desc = rule('.cdpc-desc {')
+  expect(desc, 'font-size: 13px')
+  expect(desc, 'line-height: 1.5')
+  expect(desc, 'color: var(--dsw-alias-label-tertiary)')
+
+  const chevron = rule('.cdpc-chevron {')
+  expect(chevron, 'flex: none')
+})
