@@ -140,6 +140,8 @@ export declare class ChickenBrain {
     private lastAnswerAt;
     /** Minimum gap between answer barks. */
     private readonly answerDebounceMs;
+    /** True while scheduling is suspended by {@link pause}. */
+    private paused;
     /**
      * @param config - autonomy tuning from the plugin config.
      * @param clock - timer source.
@@ -164,6 +166,19 @@ export declare class ChickenBrain {
      * @returns nothing.
      */
     dispatch(trigger: PetTrigger): void;
+    /**
+     * Suspend scheduling without discarding state.
+     *
+     * Used while the pet is hidden: the timers would otherwise keep firing
+     * against an element nobody can see.
+     * @returns nothing.
+     */
+    pause(): void;
+    /**
+     * Resume scheduling after {@link pause}.
+     * @returns nothing.
+     */
+    resume(): void;
     /** Stop every timer. */
     dispose(): void;
     /**

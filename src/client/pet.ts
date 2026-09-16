@@ -176,14 +176,23 @@ export function mountPet(
    * @returns nothing.
    */
   const play = (animation: AnimationName): void => {
-    if (frameTimer !== undefined) window.clearTimeout(frameTimer)
-    frameTimer = undefined
+    stopFrames()
     currentRow = rowIndex(animation)
     currentFrame = 0
+    startFrames()
+  }
+
+  /** Stop the frame loop; safe to call when none is running. */
+  const stopFrames = (): void => {
+    if (frameTimer !== undefined) window.clearTimeout(frameTimer)
+    frameTimer = undefined
+  }
+
+  /** Begin looping the current row from its current frame. */
+  const startFrames = (): void => {
     const row = ROWS[currentRow]
     if (row === undefined) return
-    paint(currentRow, 0)
-
+    paint(currentRow, currentFrame)
     const step = (): void => {
       const r = ROWS[currentRow]
       if (r === undefined) return
@@ -191,7 +200,7 @@ export function mountPet(
       paint(currentRow, currentFrame)
       frameTimer = window.setTimeout(step, r.frames[currentFrame] ?? 140)
     }
-    frameTimer = window.setTimeout(step, row.frames[0] ?? 140)
+    frameTimer = window.setTimeout(step, row.frames[currentFrame] ?? 140)
   }
 
   // ---- bubble -------------------------------------------------------------
@@ -426,34 +435,59 @@ export function mountPet(
     audio = undefined
   })
 
-  // A settings save reaches the pet here, so the card updates the pet live
-  // instead of asking the user to restart.
-  const offSettings = service?.onSettings?.((next) => {
-    const merged: Config = { ...settings, ...next }
-    // `enabled` is deliberately not honoured after mount: hiding and showing
-    // the pet is the plugin's own lifecycle, and toggling it mid-session would
-    // leave the brain's timers running against a removed element.
-    settings = merged
+  // ---- applying settings --------------------------------------------------
+
+  /** Whether the pet is currently on screen. */
+  let visible = true
+
+  /**
+   * Show or hide the pet.
+   *
+   * Hiding stops the frame loop and the behaviour timer, so a hidden pet costs
+   * nothing; showing starts them again against the same element. The element
+   * itself is kept rather than removed, so toggling back does not rebuild the
+   * overlay or lose its dragged position.
+   * @param next - whether the pet should be on screen.
+   * @returns nothing.
+   */
+  const setVisible = (next: boolean): void => {
+    if (next === visible) return
+    visible = next
+    root.style.display = next ? '' : 'none'
+    if (next) {
+      startFrames()
+      brain.resume()
+    } else {
+      stopFrames()
+      brain.pause()
+      say('')
+    }
+  }
+
+  /**
+   * Apply a complete settings value to the live pet.
+   * @param next - the settings to apply.
+   * @returns nothing.
+   */
+  const applySettings = (next: Config): void => {
+    settings = next
     brainConfig.config = {
       ...brainConfig.config,
-      idleMinMs: merged.idleMinSec * 1000,
-      idleMaxMs: Math.max(merged.idleMinSec, merged.idleMaxSec) * 1000,
-      liveliness: merged.liveliness,
+      idleMinMs: next.idleMinSec * 1000,
+      idleMaxMs: Math.max(next.idleMinSec, next.idleMaxSec) * 1000,
+      liveliness: next.liveliness,
     }
     applyGeometry()
+    setVisible(next.enabled)
+  }
+
+  // The host half's own service carries settings when both halves share a
+  // process (a test harness). In the page the browser half subscribes to the
+  // settings scope instead, and calls `update` through this handle.
+  const offSettings = service?.onSettings?.((next) => {
+    applySettings({ ...settings, ...next })
   })
   if (offSettings !== undefined) ctx.effect(() => offSettings)
 
-  return {
-    update(next: Config): void {
-      settings = { ...settings, ...next }
-      brainConfig.config = {
-        ...brainConfig.config,
-        idleMinMs: settings.idleMinSec * 1000,
-        idleMaxMs: Math.max(settings.idleMinSec, settings.idleMaxSec) * 1000,
-        liveliness: settings.liveliness,
-      }
-      applyGeometry()
-    },
-  }
+  return { update: applySettings }
 }

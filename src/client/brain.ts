@@ -211,6 +211,8 @@ export class ChickenBrain {
   private lastAnswerAt = 0
   /** Minimum gap between answer barks. */
   private readonly answerDebounceMs: number
+  /** True while scheduling is suspended by {@link pause}. */
+  private paused = false
 
   /**
    * @param config - autonomy tuning from the plugin config.
@@ -315,6 +317,31 @@ export class ChickenBrain {
         void _exhaustive
       }
     }
+  }
+
+  /**
+   * Suspend scheduling without discarding state.
+   *
+   * Used while the pet is hidden: the timers would otherwise keep firing
+   * against an element nobody can see.
+   * @returns nothing.
+   */
+  pause(): void {
+    this.releaseTimer?.()
+    this.rollTimer?.()
+    this.releaseTimer = undefined
+    this.rollTimer = undefined
+    this.paused = true
+  }
+
+  /**
+   * Resume scheduling after {@link pause}.
+   * @returns nothing.
+   */
+  resume(): void {
+    if (!this.paused) return
+    this.paused = false
+    if (this.mode === 'idle') this.scheduleRoll()
   }
 
   /** Stop every timer. */
@@ -435,6 +462,7 @@ export class ChickenBrain {
    * @returns nothing.
    */
   private scheduleRoll(extraMs = 0): void {
+    if (this.paused) return
     this.rollTimer?.()
     const span = Math.max(0, this.config.idleMaxMs - this.config.idleMinMs)
     const gap = this.config.idleMinMs + this.random() * span + extraMs

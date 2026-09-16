@@ -243,3 +243,52 @@ test('higher liveliness means less standing still', async () => {
     `liveliness should reduce idle time, got ${low.toFixed(2)} at 0.1 and ${high.toFixed(2)} at 0.95`,
   )
 })
+
+test('the brain stops scheduling while paused and resumes after', async () => {
+  const { ChickenBrain } = await import(join(root, 'lib', 'client', 'brain.js'))
+  let now = 0
+  let id = 0
+  const timers = new Map()
+  const clock = {
+    now: () => now,
+    setTimeout(fn, ms) { const key = ++id; timers.set(key, { at: now + ms, fn }); return () => timers.delete(key) },
+  }
+  const advance = ms => {
+    const target = now + ms
+    for (;;) {
+      let pick = -1
+      let earliest = Infinity
+      for (const [key, timer] of timers) if (timer.at <= target && timer.at < earliest) { earliest = timer.at; pick = key }
+      if (pick < 0) break
+      const timer = timers.get(pick)
+      timers.delete(pick)
+      now = timer.at
+      timer.fn()
+    }
+    now = target
+  }
+  let seed = 42
+  const random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+  const brain = new ChickenBrain(
+    { idleMinMs: 1000, idleMaxMs: 2000, liveliness: 1, celebrateMs: 1000, reactMs: 500 },
+    clock, random,
+  )
+  let changes = 0
+  brain.subscribe(() => { changes++ })
+
+  advance(20000)
+  const before = changes
+  assert.ok(before > 0, 'the pet must act on its own before pausing')
+
+  // Hiding the pet must stop its timers, not merely its drawing: a hidden pet
+  // that keeps scheduling burns frames against an element nobody can see.
+  brain.pause()
+  advance(30000)
+  assert.equal(changes, before, 'a paused pet must not schedule anything')
+
+  brain.resume()
+  advance(20000)
+  assert.ok(changes > before, 'a resumed pet must schedule again')
+
+  brain.dispose()
+})
