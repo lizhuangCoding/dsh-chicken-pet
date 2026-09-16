@@ -170,10 +170,16 @@ test('the autonomy engine runs without a DOM and varies its behaviour', async ()
   assert.ok(seen.size >= 3, `expected varied idle behaviour, saw only ${[...seen].join(', ')}`)
   assert.ok(seen.has('idle'), 'the chicken should still stand still sometimes')
 
-  // Agent work must take over, and a clean finish must celebrate.
-  brain.dispatch({ kind: 'agent-working' })
+  // A running agent takes over, and the pose tracks the tool picture within it.
+  brain.dispatch({ kind: 'agent-state', running: true, toolsInFlight: 0, recentTool: false, waiting: false })
+  assert.equal(
+    brain.snapshot().animation,
+    'think',
+    'a running agent with no tool in flight is thinking, not idle',
+  )
+  brain.dispatch({ kind: 'agent-state', running: true, toolsInFlight: 1, recentTool: true, waiting: false })
   assert.equal(brain.snapshot().animation, 'work')
-  brain.dispatch({ kind: 'turn-finished' })
+  brain.dispatch({ kind: 'agent-state', running: false, toolsInFlight: 0, recentTool: false, waiting: false })
   assert.equal(brain.snapshot().animation, 'celebrate')
   advance(2500)
   assert.equal(brain.snapshot().mode, 'idle', 'a one-shot must release back to idle')
@@ -373,4 +379,40 @@ test('the browser half tolerates a package without a clip', () => {
   // The assertion is that this call does not throw.
   exports.apply(ctx, exports.defaultConfig())
   assert.ok(nodes.length > 0, 'the pet element must be created even without a clip')
+})
+
+test('the pet reacts the moment the agent starts running', async () => {
+  const { ChickenBrain } = await import(join(root, 'lib', 'client', 'brain.js'))
+  // The regression this guards: an event-driven pet only reacts once a tool
+  // fires, so the whole stretch where the model is thinking showed no state at
+  // all and the pet looked frozen while an answer was being written.
+  const brain = new ChickenBrain(
+    { idleMinMs: 1000, idleMaxMs: 2000, liveliness: 1, celebrateMs: 2000, reactMs: 800 },
+    { now: () => 0, setTimeout: () => () => {} },
+    () => 0.5,
+  )
+  brain.dispatch({ kind: 'agent-state', running: false, toolsInFlight: 0, recentTool: false, waiting: false })
+  assert.equal(brain.snapshot().mode, 'idle')
+
+  // No tool event: exactly what a thinking turn looks like.
+  brain.dispatch({ kind: 'agent-state', running: true, toolsInFlight: 0, recentTool: false, waiting: false })
+  assert.equal(
+    brain.snapshot().mode,
+    'thinking',
+    'the first sample of a running agent must move the pet off idle',
+  )
+  assert.equal(brain.snapshot().text, '想想…')
+  brain.dispose()
+})
+
+test('waiting on the human outranks the running pose', async () => {
+  const { ChickenBrain } = await import(join(root, 'lib', 'client', 'brain.js'))
+  const brain = new ChickenBrain(
+    { idleMinMs: 1000, idleMaxMs: 2000, liveliness: 1, celebrateMs: 2000, reactMs: 800 },
+    { now: () => 0, setTimeout: () => () => {} },
+    () => 0.5,
+  )
+  brain.dispatch({ kind: 'agent-state', running: true, toolsInFlight: 2, recentTool: true, waiting: true })
+  assert.equal(brain.snapshot().mode, 'waiting', 'an approval prompt is what the user must act on')
+  brain.dispose()
 })

@@ -55,11 +55,24 @@ export type PetMode =
 /** Why the chicken is doing something; drives which animation is chosen. */
 export type PetTrigger =
   | { readonly kind: 'idle-roll' }
-  | { readonly kind: 'agent-working' }
-  | { readonly kind: 'agent-thinking' }
-  | { readonly kind: 'agent-waiting' }
+  /**
+   * The whole live picture of what the agent is doing, sampled from the agent
+   * registry. This is the primary signal: it is true from the moment a message
+   * is sent, so the pet reacts to "the agent is thinking" as well as to tool
+   * execution. Per-tool and per-answer events only refine it.
+   */
+  | {
+    readonly kind: 'agent-state'
+    /** Whether any live agent is running a turn. */
+    readonly running: boolean
+    /** Tools executing right now. */
+    readonly toolsInFlight: number
+    /** Whether a tool ran recently, so the work pose holds between calls. */
+    readonly recentTool: boolean
+    /** Whether the agent is blocked on the human. */
+    readonly waiting: boolean
+  }
   | { readonly kind: 'answer-finished' }
-  | { readonly kind: 'turn-finished' }
   | { readonly kind: 'turn-failed' }
   | { readonly kind: 'poked' }
   | { readonly kind: 'celebration-over' }
@@ -213,6 +226,8 @@ export class ChickenBrain {
   private readonly answerDebounceMs: number
   /** True while scheduling is suspended by {@link pause}. */
   private paused = false
+  /** Whether the agent was running at the previous sample. */
+  private wasRunning = false
 
   /**
    * @param config - autonomy tuning from the plugin config.
@@ -266,21 +281,8 @@ export class ChickenBrain {
    */
   dispatch(trigger: PetTrigger): void {
     switch (trigger.kind) {
-      case 'agent-working':
-        this.busy = true
-        this.setMode('working')
-        return
-      case 'agent-thinking':
-        this.busy = true
-        this.setMode('thinking')
-        return
-      case 'agent-waiting':
-        this.busy = true
-        this.setMode('waiting')
-        return
-      case 'turn-finished':
-        this.busy = false
-        this.celebrate('好球！', this.config.celebrateMs)
+      case 'agent-state':
+        this.applyAgentState(trigger)
         return
       case 'answer-finished': {
         // The agent answered a step. Bark only when the chicken is otherwise
@@ -342,6 +344,57 @@ export class ChickenBrain {
     if (!this.paused) return
     this.paused = false
     if (this.mode === 'idle') this.scheduleRoll()
+  }
+
+  /**
+   * Move the pet to the pose that matches the live agent picture.
+   *
+   * The agent is `running` from the moment a message is sent until its turn
+   * closes, so this is what makes the pet react to thinking as well as to tool
+   * execution. Tool counts only pick the pose within that window.
+   *
+   * A turn that ends between two samples is celebrated: the pet sees the agent
+   * stop without having been told it finished, and staying idle there would
+   * silently drop the completion the user is watching for.
+   * @param state - the sampled agent picture.
+   * @returns nothing.
+   */
+  private applyAgentState(state: {
+    running: boolean
+    toolsInFlight: number
+    recentTool: boolean
+    waiting: boolean
+  }): void {
+    // A one-shot celebration owns the pet until it releases itself.
+    if (this.mode === 'celebrating') return
+
+    if (state.waiting) {
+      this.busy = true
+      this.setMode('waiting')
+      return
+    }
+
+    if (state.running) {
+      this.busy = true
+      this.wasRunning = true
+      this.setMode(state.toolsInFlight > 0 || state.recentTool ? 'working' : 'thinking')
+      return
+    }
+
+    // The agent is not running. A turn that was running at the last sample has
+    // just closed, so this is the completion moment.
+    if (this.wasRunning) {
+      this.wasRunning = false
+      this.busy = false
+      this.celebrate('好球！', this.config.celebrateMs)
+      return
+    }
+
+    if (this.busy) {
+      this.busy = false
+      this.setMode('idle')
+      this.scheduleRoll()
+    }
   }
 
   /** Stop every timer. */
