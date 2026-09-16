@@ -172,11 +172,16 @@ interface SettingsScope {
   unset(field: string): Promise<void>
 }
 
-/** Props the renderer passes to the card component. */
-interface CardProps {
-  /** Form actions and the current snapshot, injected at registration. */
-  inject: CardFace
-}
+/**
+ * Props the renderer passes to the card component.
+ *
+ * The inject face is spread onto the props object rather than nested under a
+ * named field: the renderer turns the face's `hooks` compartment into
+ * `use<Name>` hooks and copies every other member to the top level. Reading
+ * `props.inject` therefore yields `undefined` and the card renders with a
+ * TypeError.
+ */
+type CardProps = CardFace
 
 /** What the card's registration injects into the component. */
 export interface CardFace {
@@ -279,7 +284,7 @@ function renderField(spec: FieldSpec, value: unknown, overridden: boolean, face:
  * @returns the card's element tree.
  */
 export function ChickenPetCard(props: CardProps) {
-  const face = props.inject
+  const face = props
   const [snapshot, setSnapshot] = useState<ScopeSnapshot>(() => face.getSnapshot())
 
   useEffect(() => {

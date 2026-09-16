@@ -20,7 +20,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** React stand-ins good enough for module evaluation; the pet never calls them. */
 const stubModules = {
-  react: { createElement: () => ({}), useState: () => [undefined, () => {}], useEffect: () => {} },
+  react: {
+    createElement: (type, props, ...children) => ({ type, props, children }),
+    // A real useState calls a function initializer; returning undefined here
+    // would hide a card that dereferences its snapshot on first render.
+    useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useEffect: () => {},
+  },
   'react/jsx-runtime': { jsx: () => ({}), jsxs: () => ({}), Fragment: {} },
 }
 
@@ -126,4 +132,55 @@ test('the bundled plugin applies against a stub context without throwing', () =>
     'only the settings scope is awaited; the slot registry is read from the injected context',
   )
   assert.equal(listeners.size, 0, 'no listeners are registered without a document to draw into')
+})
+
+test('the card renders with the props the renderer actually passes', () => {
+  // The renderer spreads the inject face onto props: the face's `hooks`
+  // compartment becomes `use<Name>` hooks and every other member is copied to
+  // the top level. Reading `props.inject` yields undefined and crashes the card
+  // inside the slot, which the page reports as "slot entry crashed" — the pet
+  // still draws, so nothing else looks wrong.
+  const registration = loadBundle()
+  let captured
+  const scope = {
+    getSnapshot: () => ({
+      status: 'ready',
+      value: { enabled: true, liveliness: 0.75, idleMinSec: 4, idleMaxSec: 12, size: 128, corner: 'bottom-right', sound: true, volume: 0.85 },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    }),
+    subscribe: () => () => {},
+    set: async () => {},
+    unset: async () => {},
+  }
+  const slots = {
+    register: (options, component) => { captured = { options, component }; return () => {} },
+    inject: (_key, callback) => { callback(); return () => {} },
+  }
+  const ctx = {
+    get: name => (name === 'slots' ? slots : name === 'settingsScope' ? { bind: () => scope } : undefined),
+    on: () => () => {},
+    effect: fn => fn(),
+    inject: (_deps, callback) => callback({
+      get: ctx.get, on: ctx.on, effect: ctx.effect, slots,
+      settingsScope: { bind: () => scope },
+    }),
+  }
+  registration.factory(specifier => {
+    if (specifier in stubModules) return stubModules[specifier]
+    throw new Error(`unexpected require: ${specifier}`)
+  }).apply(ctx, { enabled: true })
+
+  assert.ok(captured !== undefined, 'the card must register into settings.plugin.item')
+
+  // Exactly the renderer's shape: face members at the top level.
+  const props = { ...captured.options.inject() }
+  const tree = captured.component(props)
+  assert.ok(tree !== null && typeof tree === 'object', 'the card must render an element')
+  assert.ok(
+    JSON.stringify(tree).includes('小鸡桌宠'),
+    'the rendered card must carry its title; an empty or crashed tree means the props contract drifted',
+  )
 })
