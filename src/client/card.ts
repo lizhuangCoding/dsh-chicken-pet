@@ -150,19 +150,15 @@ function effectiveValues(snapshot: ScopeSnapshot, staged: Record<string, unknown
  * Render one field's control.
  * @param spec - the field's description.
  * @param value - the effective value.
- * @param overridden - whether the user layer sets this field.
  * @param disabled - whether writing is refused.
  * @param commit - apply a staged edit.
- * @param reset - clear the field back to the composition layer.
  * @returns the row element.
  */
 function renderField(
   spec: FieldSpec,
   value: unknown,
-  overridden: boolean,
   disabled: boolean,
   commit: (field: Field, value: unknown) => void,
-  reset: (field: Field) => void,
 ) {
   let control
   switch (spec.kind) {
@@ -229,16 +225,7 @@ function renderField(
   }
 
   return h('div', { className: 'cdpc-row', key: spec.field },
-    h('div', { className: 'cdpc-label' },
-      h('span', null, spec.label),
-      overridden
-        ? h('button', {
-          type: 'button',
-          className: 'cdpc-reset',
-          title: '恢复默认',
-          onClick: () => reset(spec.field),
-        }, '重置')
-        : null),
+    h('div', { className: 'cdpc-label' }, h('span', null, spec.label)),
     h('div', { className: 'cdpc-hint' }, spec.hint),
     h('div', { className: 'cdpc-control' }, control))
 }
@@ -267,6 +254,9 @@ export function ChickenPetCard(props: CardFace & { __open?: boolean }) {
   const values = effectiveValues(snapshot, staged)
   const user = (snapshot.user ?? {}) as Record<string, unknown>
   const dirty = Object.keys(staged).length > 0
+  // Whether any field still differs from the composition layer: the reset button
+  // has nothing to do once every override is gone.
+  const anyOverridden = Object.keys(user).length > 0
 
   // Collapse once the write settles cleanly. A rejected write keeps its drafts
   // and diagnostics on screen so the user can correct them.
@@ -285,18 +275,27 @@ export function ChickenPetCard(props: CardFace & { __open?: boolean }) {
     setFailed(false)
   }
 
-  const reset = (field: Field): void => {
-    // A field the user edited but never saved needs no wire call: dropping the
-    // staged value restores the stored one.
-    if (field in staged) {
-      setStaged((current) => {
-        const next = { ...current }
-        delete next[field]
-        return next
-      })
-      return
+  /**
+   * Clear every field the user has overridden, returning the card to the
+   * composition defaults.
+   *
+   * Staged edits need no wire call — dropping them restores the stored value —
+   * so only fields already saved are unset on the host.
+   * @returns fulfillment after every host write settles.
+   */
+  const restoreDefaults = async (): Promise<void> => {
+    const saved = Object.keys(user).filter(field => !(field in staged))
+    setStaged({})
+    setFailed(false)
+    if (saved.length === 0) return
+    setSaving(true)
+    try {
+      for (const field of saved) await face.reset(field)
+    } catch {
+      setFailed(true)
+    } finally {
+      setSaving(false)
     }
-    void face.reset(field)
   }
 
   const save = async (): Promise<void> => {
@@ -343,12 +342,20 @@ export function ChickenPetCard(props: CardFace & { __open?: boolean }) {
         ...GROUPS.map(group => h('div', { className: 'cdpc-group', key: group.title },
           h('div', { className: 'cdpc-grouptitle' }, group.title),
           ...group.fields.map(spec =>
-            renderField(spec, values[spec.field], spec.field in user, disabled, commit, reset)))),
+            renderField(spec, values[spec.field], disabled, commit)))),
         h('div', { className: 'cdpc-footer' },
           failed
             ? h('span', { className: 'cdpc-error', role: 'status' }, '保存失败，请重试。')
             : h('span', { className: 'cdpc-status' },
               disabled ? '当前部署只读。' : dirty ? `有 ${Object.keys(staged).length} 项未保存` : '改动会保存到你的配置。'),
+          // One reset for the whole card rather than one per field: a row of
+          // identical "reset" links competes with the labels for attention, and
+          // restoring defaults is a whole-panel action anyway.
+          h(Button, {
+            size: 'sm',
+            disabled: saving || disabled || (!dirty && !anyOverridden),
+            onClick: () => { void restoreDefaults() },
+          }, '恢复默认'),
           h(Button, {
             size: 'sm',
             disabled: !dirty || saving,

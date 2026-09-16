@@ -242,7 +242,9 @@ test('the card is collapsed until opened, and discloses every control', () => {
   assert.equal(count(open, 'Switch'), 2, 'two toggles')
   assert.equal(open.filter(n => n.props?.type === 'range').length, 2, 'two sliders')
   assert.equal(open.filter(n => n.props?.type === 'number').length, 3, 'three number inputs')
-  assert.equal(count(open, 'Button'), 2, 'discard and save')
+  // Reset, discard, and save. Reset is one card-level action rather than a
+  // button per field, which is what the labels would otherwise compete with.
+  assert.equal(count(open, 'Button'), 3, 'reset, discard, and save')
   for (const group of ['显示', '活跃度', '声音']) {
     assert.ok(JSON.stringify(open).includes(group), `the ${group} group must render`)
   }
@@ -331,4 +333,19 @@ test('the card geometry matches the shipped card', () => {
 
   const chevron = rule('.cdpc-chevron {')
   expect(chevron, 'flex: none')
+})
+
+test('the card has one reset for the whole panel, not one per field', () => {
+  const source = readFileSync(join(root, 'src', 'client', 'card-styles.ts'), 'utf8')
+  assert.ok(
+    !source.includes('.cdpc-reset'),
+    'a per-field reset style means the per-field buttons came back; defaults are restored '
+    + 'for the whole card from its footer',
+  )
+  const card = readFileSync(join(root, 'src', 'client', 'card.ts'), 'utf8')
+  assert.equal(
+    (card.match(/恢复默认/g) ?? []).length,
+    1,
+    'exactly one restore control belongs on the card',
+  )
 })

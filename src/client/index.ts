@@ -47,22 +47,23 @@ export type { Config } from './config.ts'
  * @returns nothing.
  */
 export function apply(ctx: Context, config?: Partial<Config>): void {
+  // The sheet URL and the saved settings both arrive from the browser side's own
+  // view of the host. This half runs in the page, so `ctx.get` cannot reach a
+  // service the host process provides; the service name is kept only as the
+  // same-process fallback a test harness mounts.
   const service = ctx.get('chickenPetSheet') as SheetInfo | undefined
+  const pet = mountPet(ctx, service, { ...defaultConfig(), ...config })
 
-  mountPet(ctx, service, { ...defaultConfig(), ...config })
-
-  // The card needs the slot registry and the settings scope together. Asking
-  // for both through `ctx.inject` waits until they exist without holding up the
-  // pet itself, which is why these dependencies are declared here rather than on
-  // the plugin.
-  // Mirrors the shape a shipped settings card uses: wait on the settings scope
-  // alone, then read the slot registry from the injected context inside the
-  // callback. Asking for `slots` in this dependency list as well would gate the
-  // callback on a second service for no benefit, and a callback that never runs
-  // reports nothing.
   ctx.inject(['settingsScope'], (ready) => {
     const scope = (ready as unknown as {
-      settingsScope?: { bind(spec: { namespace: string }): unknown }
+      settingsScope?: {
+        bind(spec: { namespace: string }): {
+          getSnapshot(): { status: string; value?: Partial<Config> }
+          subscribe(listener: () => void): () => void
+          set(field: string, value: unknown): Promise<void>
+          unset(field: string): Promise<void>
+        }
+      }
     } | undefined)?.settingsScope
     // A missing binding is not an error worth throwing over: the pet still
     // draws, and throwing here would take down the whole plugin.
@@ -70,7 +71,20 @@ export function apply(ctx: Context, config?: Partial<Config>): void {
       console.warn('[chicken-pet] settingsScope is unavailable; the settings card is skipped')
       return
     }
-    console.info('[chicken-pet] registering the settings card')
-    installCard(ready, scope.bind({ namespace: SETTINGS_NAMESPACE }) as never)
+
+    const bound = scope.bind({ namespace: SETTINGS_NAMESPACE })
+
+    // Saved settings reach the pet through the same scope the card writes, so a
+    // change applies live. Reading the host half's own service would deliver
+    // nothing: that service lives in the other process.
+    const applySaved = (): void => {
+      const snapshot = bound.getSnapshot()
+      if (snapshot.status !== 'ready' || snapshot.value === undefined) return
+      pet?.update({ ...defaultConfig(), ...config, ...snapshot.value })
+    }
+    applySaved()
+    ready.effect(() => bound.subscribe(applySaved))
+
+    installCard(ready, bound as never)
   })
 }
