@@ -103,3 +103,29 @@ test('the settings namespace is optional on the host too', () => {
     'declaring `settings` as required would leave the pet pending where no settings provider is mounted',
   )
 })
+
+test('the card registers through slots.inject, not by calling register eagerly', () => {
+  const source = readFileSync(join(root, 'src', 'client', 'card.ts'), 'utf8')
+  assert.ok(
+    /slots\.inject\('settings\.plugin\.item'/.test(source),
+    'the card must register through slots.inject so it runs for each lifetime of the slot\'s '
+    + 'declaring owner. Registering eagerly loses the race when this plugin activates before the '
+    + 'settings page, and the card is then dropped with no error.',
+  )
+  assert.ok(
+    !/ctx\.effect\(\(\) => slots\.register\(/.test(source),
+    'a direct slots.register call at activation time is the eager form this guard exists to prevent',
+  )
+})
+
+test('the client declares no inject hint that pins a package name', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  const inject = pkg.dsh.client.inject
+  assert.equal(
+    inject,
+    undefined,
+    'dsh.client.inject names package rows that must materialize first. A wrong or unnecessary '
+    + 'name silently keeps the browser half from loading, which is how the settings card went '
+    + 'missing while the host half kept working.',
+  )
+})

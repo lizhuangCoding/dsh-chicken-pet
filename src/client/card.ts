@@ -334,13 +334,21 @@ export function installCard(ctx: Context, scope: SettingsScope): void {
 
   const slots = ctx.get('slots') as {
     register(options: unknown, component: unknown): () => void
+    inject(key: string, callback: () => () => void): () => void
   } | undefined
 
   if (slots === undefined) return
 
   // `key` is the namespace the host serves; the page dispatches on it.
-  ctx.effect(() => slots.register(
+  //
+  // Registration goes through `slots.inject` rather than calling `register`
+  // directly. `inject` runs the callback for each lifetime of the slot's
+  // DECLARING owner, so the card is registered once that owner — the settings
+  // page's plugin section — is actually mounted. Registering eagerly loses the
+  // race whenever this plugin activates first, and a slot that does not exist
+  // yet has nowhere to put the card.
+  ctx.effect(() => slots.inject('settings.plugin.item', () => slots.register(
     { name: 'settings.plugin.item', key: SETTINGS_NAMESPACE, inject: () => face },
     ChickenPetCard,
-  ))
+  )))
 }
