@@ -99,8 +99,13 @@ const config = {
     declaration: false,
     declarationMap: false,
     sourceMap: false,
+    // The shell's UI primitives are `.tsx`. Without a JSX mode the whole module
+    // fails to resolve, and every import from it reads as a missing export.
+    jsx: 'react-jsx',
   },
-  include: ['src/**/*.ts'],
+  // `.tsx` too: the plugin renders its settings card through createElement, but
+  // the harness modules it pulls in are JSX.
+  include: ['src/**/*.ts', 'src/**/*.tsx'],
 }
 
 writeFileSync(join(root, 'tsconfig.typecheck.json'), `${JSON.stringify(config, null, 2)}\n`)

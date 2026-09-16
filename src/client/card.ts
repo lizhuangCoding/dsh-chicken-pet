@@ -23,7 +23,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createElement as h, useEffect, useRef, useState } from 'react'
-import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutline14, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type { Config } from './config.ts'
 
@@ -135,6 +135,7 @@ const CARD_STYLES = `
   border-color: var(--dsw-alias-label-dimmed);
 }
 .cdpc-head {
+  box-sizing: border-box;
   width: 100%;
   appearance: none;
   border: 0;
@@ -147,8 +148,10 @@ const CARD_STYLES = `
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: 16px;
 }
+/* The chevron is the shell's own 14px icon; keep it from flexing. */
+.cdpc-head > svg { flex: none; width: 14px; height: 14px; }
 .cdpc-head:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: -2px;
@@ -158,8 +161,6 @@ const CARD_STYLES = `
 .cdpc-desc { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
 .cdpc-chevron {
   flex: none;
-  width: 14px;
-  height: 14px;
   color: var(--dsw-alias-label-tertiary);
   transition: transform .16s;
 }
@@ -229,20 +230,17 @@ const CARD_STYLES = `
 .cdpc-pending { flex: none; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 `
 
-/** The chevron, drawn inline so the card needs no icon import beyond primitives. */
-const CHEVRON_PATH = 'M2 4.5 7 9.5 12 4.5'
-
-/** Render the disclosure chevron. */
-function Chevron() {
-  return h('svg', { className: 'cdpc-chevron', viewBox: '0 0 14 14', 'aria-hidden': 'true' },
-    h('path', {
-      d: CHEVRON_PATH,
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 1.6,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-    }))
+/**
+ * Render the disclosure chevron.
+ *
+ * The shell's own icon rather than a drawn one: it carries explicit width and
+ * height attributes, so it cannot stretch to fill the header the way an
+ * attribute-less inline SVG does.
+ * @param props - the icon's class name.
+ * @returns the chevron icon element.
+ */
+function Chevron(props: { className?: string }) {
+  return h(IconChevronDownOutline14, { className: props.className })
 }
 
 /**
@@ -449,7 +447,7 @@ export function ChickenPetCard(props: CardFace & { __open?: boolean }) {
         h('span', { className: 'cdpc-name' }, '🐔 小鸡桌宠'),
         h('span', { className: 'cdpc-desc' }, '一只会自己找事做的像素鸡，跟着 Agent 的工作状态活动。')),
       dirty ? h('span', { className: 'cdpc-pending' }, '未保存') : null,
-      h(Chevron)),
+      h(Chevron, { className: 'cdpc-chevron' })),
     open
       ? h('div', { className: 'cdpc-body' },
         ...GROUPS.map(group => h('div', { className: 'cdpc-group', key: group.title },

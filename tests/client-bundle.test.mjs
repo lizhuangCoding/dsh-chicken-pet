@@ -34,6 +34,9 @@ const stubModules = {
   '@deepseek-ai/dsh-client-ui-primitives': {
     Switch: function Switch(props) { return { type: 'Switch', props, children: [] } },
     Button: function Button(props) { return { type: 'Button', props, children: [] } },
+    IconChevronDownOutline14: function IconChevronDownOutline14(props) {
+      return { type: 'IconChevronDown', props, children: [] }
+    },
   },
 }
 
@@ -243,4 +246,45 @@ test('the card is collapsed until opened, and discloses every control', () => {
   for (const group of ['显示', '活跃度', '声音']) {
     assert.ok(JSON.stringify(open).includes(group), `the ${group} group must render`)
   }
+})
+
+test('the card uses the shell icon rather than a drawn svg', () => {
+  const registration = loadBundle()
+  const face = {
+    getSnapshot: () => ({
+      status: 'ready',
+      value: { enabled: true, liveliness: 0.75, idleMinSec: 4, idleMaxSec: 12, size: 128, corner: 'bottom-right', sound: true, volume: 0.85 },
+      base: {}, user: {}, revision: 1, writable: true,
+    }),
+    subscribe: () => () => {}, set: async () => {}, reset: async () => {},
+  }
+  const exports = exportsOf(registration)
+  const tree = exports.ChickenPetCard(face)
+
+  const collect = (node, out = []) => {
+    if (node === null || typeof node !== 'object') return out
+    out.push(node)
+    if (Array.isArray(node.children)) for (const child of node.children) collect(child, out)
+    return out
+  }
+  const nodes = collect(tree)
+
+  // The header renders a local `Chevron` wrapper, so the element tree stops at
+  // that component; render it to see what it actually produces.
+  const chevrons = nodes.filter(n => typeof n.type === 'function' && n.type.name === 'Chevron')
+  assert.equal(chevrons.length, 1, 'the header must render the disclosure control')
+  const rendered = collect(chevrons[0].type(chevrons[0].props ?? {}))
+
+  assert.equal(
+    rendered.filter(n => n.type?.name === 'IconChevronDownOutline14').length,
+    1,
+    'the disclosure control must use the shell chevron icon',
+  )
+  // A hand-written `<svg>` has no width/height attributes, so flex stretches it
+  // to fill the header — the card renders as one giant arrow.
+  assert.equal(
+    rendered.filter(n => n.type === 'svg').length,
+    0,
+    'the card must not draw its own svg; the shell icon carries its own size',
+  )
 })
