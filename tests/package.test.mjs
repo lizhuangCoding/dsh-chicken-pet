@@ -86,12 +86,13 @@ test('the spritesheet.json row order matches the runtime table', async () => {
 test('the host half registers its route and serves the sheet', async () => {
   const host = await import(join(root, 'lib', 'index.js'))
   assert.equal(host.name, 'chicken-pet-host')
-  assert.deepEqual(host.inject, ['webServer'])
+  assert.deepEqual(host.inject, ['webServer', 'agents'])
 
   const routes = []
+  const disposers = []
   let provided
   const ctx = {
-    effect: fn => fn(),
+    effect: fn => { const d = fn(); if (typeof d === 'function') disposers.push(d); return d },
     webServer: { register: route => { routes.push(route); return () => {} } },
     provide: (name, value) => { provided = { name, value } },
     // The settings namespace registers through `inject`; a deployment without a
@@ -124,6 +125,7 @@ test('the host half registers its route and serves the sheet', async () => {
   let postStatus
   sheetRoute.handler({ method: 'POST' }, { writeHead: s => { postStatus = s }, end: () => {} })
   assert.equal(postStatus, 405)
+  for (const dispose of disposers) dispose()
 })
 
 test('the autonomy engine runs without a DOM and varies its behaviour', async () => {
@@ -303,9 +305,10 @@ test('the brain stops scheduling while paused and resumes after', async () => {
 test('the host serves the completion voice when the package ships one', async () => {
   const host = await import(join(root, 'lib', 'index.js'))
   const routes = []
+  const disposers = []
   let provided
   const ctx = {
-    effect: fn => fn(),
+    effect: fn => { const d = fn(); if (typeof d === 'function') disposers.push(d); return d },
     webServer: { register: route => { routes.push(route); return () => {} } },
     provide: (name, value) => { provided = { name, value } },
     inject: () => {},
@@ -334,6 +337,10 @@ test('the host serves the completion voice when the package ships one', async ()
     provided.value.voice?.startsWith('/chicken-pet/voice.mp3'),
     'the browser half needs the URL, which carries the clip hash for cache invalidation',
   )
+
+  // The host half samples the agent registry on an interval; releasing it here
+  // keeps this test from holding the process open.
+  for (const dispose of disposers) dispose()
 })
 
 test('the browser half tolerates a package without a clip', () => {
@@ -368,17 +375,20 @@ test('the browser half tolerates a package without a clip', () => {
   })
   assert.equal(typeof exports.apply, 'function')
 
+  const effects = []
+  const collect = fn => { const d = fn(); if (typeof d === 'function') effects.push(d); return d }
   const ctx = {
     get: () => undefined,
     on: () => () => {},
-    effect: fn => fn(),
-    inject: (_deps, callback) => callback({
-      get: () => undefined, on: () => () => {}, effect: fn => fn(),
-    }),
+    effect: collect,
+    inject: (_deps, callback) => callback({ get: () => undefined, on: () => () => {}, effect: collect }),
   }
   // The assertion is that this call does not throw.
   exports.apply(ctx, exports.defaultConfig())
   assert.ok(nodes.length > 0, 'the pet element must be created even without a clip')
+
+  // The pet polls for agent state; release the interval so the run can exit.
+  for (const dispose of effects) dispose()
 })
 
 test('the pet reacts the moment the agent starts running', async () => {

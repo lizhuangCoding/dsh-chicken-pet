@@ -20,6 +20,8 @@ export interface SheetInfo {
     cols: number;
     cellWidth: number;
     cellHeight: number;
+    /** Live agent-activity URL served by the host half. */
+    stateUrl?: string;
     /** Completion voice URL; absent when the package ships no clip. */
     voice?: string;
     /** Current appearance and behaviour settings, read live. */

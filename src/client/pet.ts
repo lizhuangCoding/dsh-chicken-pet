@@ -36,6 +36,8 @@ export interface SheetInfo {
   cols: number
   cellWidth: number
   cellHeight: number
+  /** Live agent-activity URL served by the host half. */
+  stateUrl?: string
   /** Completion voice URL; absent when the package ships no clip. */
   voice?: string
   /** Current appearance and behaviour settings, read live. */
@@ -83,6 +85,7 @@ export function mountPet(
     cellWidth: CELL.w,
     cellHeight: CELL.h,
     voice: '/chicken-pet/voice.mp3',
+    stateUrl: '/chicken-pet/state.json',
   }
   let settings: Config = { ...config, ...service?.pets }
 
@@ -427,29 +430,44 @@ export function mountPet(
    * No event is required for the pet to be correct, so a deployment that does
    * not forward agent events still tracks the turn.
    */
-  const agents = ctx.get('agents') as {
-    list(): { status?: string }[]
-  } | undefined
+  /**
+   * The last picture the host reported.
+   *
+   * This half cannot read `ctx.agents`: that service lives in the host process,
+   * so a lookup here returns undefined and the pet would track nothing. The host
+   * samples the registry and serves it over the same origin, which is the one
+   * channel the two halves share.
+   */
+  let hostRunning = false
 
-  /** Agent statuses the previous sample saw, for the completion edge. */
+  /** Fetch the host's live agent picture. */
+  const refreshAgentState = async (): Promise<void> => {
+    const url = sheet.stateUrl
+    if (url === undefined) return
+    try {
+      const response = await fetch(url, { cache: 'no-store' })
+      if (!response.ok) return
+      const body = await response.json() as { running?: boolean }
+      const running = body.running === true
+      if (running !== hostRunning) {
+        hostRunning = running
+        trace(`主机采样 → agent ${running ? '运行中' : '已停止'}`)
+      }
+    } catch {
+      // A failed poll keeps the last picture; the next tick retries.
+    }
+  }
+
+  /**
+   * Read the picture the sampler has.
+   * @returns what the pet needs to choose a pose.
+   */
   const sampleAgentState = (): {
     running: boolean
     toolsInFlight: number
     recentTool: boolean
     waiting: boolean
-  } => {
-    let running = false
-    if (agents !== undefined) {
-      try {
-        for (const agent of agents.list()) {
-          if (agent?.status === 'running') { running = true; break }
-        }
-      } catch {
-        // A registry read can fail mid-teardown; keep the last known picture.
-      }
-    }
-    return { running, toolsInFlight, recentTool, waiting: waiting }
-  }
+  } => ({ running: hostRunning, toolsInFlight, recentTool, waiting })
 
   /** Whether the agent is blocked on the human, tracked from the approval seam. */
   let waiting = false
@@ -481,7 +499,14 @@ export function mountPet(
   }
   let lastLoggedRunning: boolean | undefined
 
-  if (agents === undefined) trace('没有 agents 服务，无法采样 agent 状态')
+  if (sheet.stateUrl === undefined) {
+    trace('主机未提供状态路由，桌宠无法同步 agent 状态')
+  } else {
+    trace(`状态同步已启用：每 250ms 拉取 ${sheet.stateUrl}`)
+    void refreshAgentState()
+    const poller = window.setInterval(() => { void refreshAgentState() }, 250)
+    ctx.effect(() => () => window.clearInterval(poller))
+  }
 
   // 250ms: fast enough that a thinking turn reads as live rather than as a
   // freeze, and cheap enough to hold one boolean for every open session.

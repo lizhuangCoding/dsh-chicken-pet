@@ -32,7 +32,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 export const name = 'chicken-pet-host'
 
 /** Services this half needs before it can serve the sheet. */
-export const inject = ['webServer']
+export const inject = ['webServer', 'agents']
 
 /**
  * Settings namespace the pet's card is keyed by.
@@ -252,6 +252,50 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.effect(() => () => listeners.clear())
 
+  // The browser half cannot read `ctx.agents`: that service lives in this
+  // process. Agent activity is sampled here and served as JSON, which is the
+  // only channel the two halves share.
+  let agentState = { running: false, waiting: 0, agents: 0 }
+  const sampleAgents = (): void => {
+    let running = false
+    let total = 0
+    try {
+      const list = ctx.agents.list()
+      total = list.length
+      for (const agent of list) {
+        if (agent?.status === 'running') { running = true; break }
+      }
+    } catch {
+      // A registry read can fail mid-teardown; the last picture stands.
+    }
+    agentState = { running, waiting: 0, agents: total }
+  }
+  sampleAgents()
+  const sampler = setInterval(sampleAgents, 250)
+  ctx.effect(() => () => clearInterval(sampler))
+
+  const statePath = '/chicken-pet/state.json'
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: statePath,
+    handler: (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, { Allow: 'GET, HEAD' })
+        res.end()
+        return
+      }
+      const body = Buffer.from(JSON.stringify(agentState))
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Content-Length': String(body.length),
+        // Live state: never cached.
+        'Cache-Control': 'no-store',
+      })
+      if (req.method === 'HEAD') res.end()
+      else res.end(body)
+    },
+  }))
+
   const voice = loadVoice()
   const voicePath = '/chicken-pet/voice.mp3'
   if (config.serveAssets && voice !== undefined) {
@@ -278,6 +322,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.provide('chickenPetSheet', {
     /** URL the browser loads the sheet from. */
     url: routePath,
+    /** URL the browser polls for live agent activity. */
+    stateUrl: statePath,
     /** Completion voice URL; absent when the package ships no clip. */
     voice: voice === undefined ? undefined : `${voicePath}?v=${voice.hash}`,
     /** Content hash used as a cache key. */

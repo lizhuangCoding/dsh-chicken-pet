@@ -79,9 +79,9 @@ test('the host half requires only the web server', () => {
   const names = match[1].slice(1, -1).split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean)
   assert.deepEqual(
     names,
-    ['webServer'],
-    'the host half serves the sprite route and needs nothing else; an extra required service '
-    + 'would leave the row pending on a deployment that does not mount it',
+    ['webServer', 'agents'],
+    'the host half serves the sprite route and samples the agent registry; `agents` is required '
+    + 'because a deployment without it cannot report what the pet should be doing',
   )
 })
 
