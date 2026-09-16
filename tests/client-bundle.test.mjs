@@ -120,6 +120,10 @@ test('the bundled plugin applies against a stub context without throwing', () =>
   }
   exports.apply(ctx, config)
   assert.equal(injected.length, 1, 'the settings card registers through ctx.inject')
-  assert.deepEqual(injected[0][0], ['slots', 'settingsScope'])
+  assert.deepEqual(
+    injected[0][0],
+    ['settingsScope'],
+    'only the settings scope is awaited; the slot registry is read from the injected context',
+  )
   assert.equal(listeners.size, 0, 'no listeners are registered without a document to draw into')
 })

@@ -66,13 +66,9 @@ test('no module declares inject as an object', () => {
 test('optional services are requested at runtime instead', () => {
   const source = clientSource()
   assert.ok(
-    /ctx\.inject\(\[[^\]]*'slots'/.test(source),
-    'the settings card must reach for the slot registry through ctx.inject, which waits for the '
-    + 'service without holding up the pet itself',
-  )
-  assert.ok(
     /ctx\.inject\(\[[^\]]*'settingsScope'/.test(source),
-    'the settings card must reach for the settings scope through ctx.inject',
+    'the settings card must reach for the settings scope through ctx.inject, which waits for the '
+    + 'service without holding up the pet itself',
   )
 })
 
@@ -127,5 +123,25 @@ test('the client declares no inject hint that pins a package name', () => {
     'dsh.client.inject names package rows that must materialize first. A wrong or unnecessary '
     + 'name silently keeps the browser half from loading, which is how the settings card went '
     + 'missing while the host half kept working.',
+  )
+})
+
+test('the card waits on the settings scope alone', () => {
+  const source = readFileSync(join(root, 'src', 'client', 'index.ts'), 'utf8')
+  const deps = /ctx\.inject\(\[([^\]]*)\]/.exec(source)?.[1] ?? ''
+  assert.ok(
+    deps.includes("'settingsScope'"),
+    'the card must wait for the settings scope before registering',
+  )
+  assert.ok(
+    !deps.includes("'slots'"),
+    'the slot registry is read from the injected context inside the callback; adding it to the '
+    + 'dependency list gates the callback on a second service, and a callback that never runs '
+    + 'reports nothing at all',
+  )
+  assert.ok(
+    /scope === undefined/.test(source),
+    'a missing settings scope must be handled rather than dereferenced: throwing here would take '
+    + 'down the whole plugin, and the pet itself does not need this service',
   )
 })
