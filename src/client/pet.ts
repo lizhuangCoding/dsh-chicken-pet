@@ -248,9 +248,13 @@ export function mountPet(
    * @returns nothing.
    */
   const speak = (): void => {
-    if (!settings.sound) return
+    if (!settings.sound) {
+      trace('叫声已关闭（设置里 sound = false）')
+      return
+    }
     const voice = sheet.voice
     if (voice === undefined) {
+      trace('没有音频文件，回落到合成音')
       chirp()
       return
     }
@@ -259,14 +263,16 @@ export function mountPet(
       voiceEl.volume = Math.max(0, Math.min(1, settings.volume))
       voiceEl.currentTime = 0
       const started = voiceEl.play()
+      trace(`播放音频（音量 ${voiceEl.volume.toFixed(2)}）`)
       if (started !== undefined) {
-        void started.catch(() => {
+        void started.catch((error: unknown) => {
           // Autoplay policy: the clip plays from the next user gesture onward.
-          trace('音频被浏览器拦截（需要先点击页面）')
+          const name = error instanceof Error ? error.name : String(error)
+          trace(`音频被拦下（${name}）—— 点一下页面任意位置再试`)
         })
       }
-    } catch {
-      // Audio is a nicety: a blocked element must not break the pet.
+    } catch (error: unknown) {
+      trace(`音频播放失败：${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -320,8 +326,10 @@ export function mountPet(
    * @returns nothing.
    */
   const push = (trigger: PetTrigger): void => {
-    brain.dispatch(trigger)
-    if (trigger.kind === 'answer-finished' && brain.snapshot().mode === 'reacting') speak()
+    // The brain reports whether this trigger decided to bark. Reading its mode
+    // afterwards was unreliable: the 250ms sampler can move the pet out of the
+    // reaction pose before that read, and the sound was skipped.
+    if (brain.dispatch(trigger) === 'bark') speak()
   }
 
   // ---- diagnostics --------------------------------------------------------

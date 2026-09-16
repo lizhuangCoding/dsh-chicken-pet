@@ -1,12 +1,12 @@
 {
   "lib/index.js": 32,
-  "lib/client.js": 65507,
+  "lib/client.js": 66107,
   "lib/host/index.js": 12122,
   "lib/client/index.js": 3337,
-  "lib/client/brain.js": 14391,
+  "lib/client/brain.js": 14468,
   "lib/client/sheet.js": 2613,
   "lib/client/config.js": 2800,
-  "lib/client/pet.js": 23015,
+  "lib/client/pet.js": 23538,
   "lib/client/card.js": 13468,
   "lib/client/card-styles.js": 4483
 }

@@ -426,3 +426,32 @@ test('waiting on the human outranks the running pose', async () => {
   assert.equal(brain.snapshot().mode, 'waiting', 'an approval prompt is what the user must act on')
   brain.dispose()
 })
+
+test('an answer that barks reports it, instead of the caller guessing', async () => {
+  // The sound was gated on reading the pet's mode right after the trigger. The
+  // 250ms sampler can move the pet out of the reaction pose first, so the read
+  // said "not reacting" and the clip was skipped with no error anywhere.
+  const { ChickenBrain } = await import(join(root, 'lib', 'client', 'brain.js'))
+  const brain = new ChickenBrain(
+    { idleMinMs: 1000, idleMaxMs: 2000, liveliness: 1, celebrateMs: 2000, reactMs: 800 },
+    { now: () => 100000, setTimeout: () => () => {} },
+    () => 0.5,
+  )
+  assert.equal(brain.dispatch({ kind: 'answer-finished' }), 'bark', 'the first answer barks')
+
+  // Inside the debounce window nothing barks, and the caller is told so.
+  assert.notEqual(brain.dispatch({ kind: 'answer-finished' }), 'bark')
+
+  // A sampled pose arriving between the trigger and the read must not matter:
+  // the decision travels with the dispatch, not with the pet's later mode.
+  const other = new ChickenBrain(
+    { idleMinMs: 1000, idleMaxMs: 2000, liveliness: 1, celebrateMs: 2000, reactMs: 800 },
+    { now: () => 200000, setTimeout: () => () => {} },
+    () => 0.5,
+  )
+  other.dispatch({ kind: 'agent-state', running: true, toolsInFlight: 0, recentTool: false, waiting: false })
+  assert.equal(other.dispatch({ kind: 'answer-finished' }), 'bark')
+
+  brain.dispose()
+  other.dispose()
+})

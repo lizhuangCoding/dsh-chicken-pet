@@ -176,7 +176,7 @@ export declare class ChickenBrain {
      * @param trigger - what happened.
      * @returns nothing.
      */
-    dispatch(trigger: PetTrigger): void;
+    dispatch(trigger: PetTrigger): 'bark' | undefined;
     /**
      * Suspend scheduling without discarding state.
      *
