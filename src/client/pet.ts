@@ -36,6 +36,8 @@ export interface SheetInfo {
   cols: number
   cellWidth: number
   cellHeight: number
+  /** Completion voice URL; absent when the package ships no clip. */
+  voice?: string
   /** Current appearance and behaviour settings, read live. */
   pets?: Partial<Config>
   /** Subscribe to appearance changes. */
@@ -80,6 +82,7 @@ export function mountPet(
     cols: COLS,
     cellWidth: CELL.w,
     cellHeight: CELL.h,
+    voice: '/chicken-pet/voice.mp3',
   }
   let settings: Config = { ...config, ...service?.pets }
 
@@ -229,17 +232,49 @@ export function mountPet(
   // ---- sound --------------------------------------------------------------
 
   let audio: AudioContext | undefined
+  /** Reused playback element; a fresh one per call would leak under a burst. */
+  let voiceEl: HTMLAudioElement | undefined
+
+  /**
+   * Play the completion voice through the browser.
+   *
+   * The clip is optional: a package without one falls back to the synthesised
+   * chirp so the pet still answers audibly. Playback is best-effort — browsers
+   * refuse audio before the first user gesture, and that refusal must not break
+   * the pet or surface as an error.
+   * @returns nothing.
+   */
+  const speak = (): void => {
+    if (!settings.sound) return
+    const voice = sheet.voice
+    if (voice === undefined) {
+      chirp()
+      return
+    }
+    try {
+      voiceEl ??= new Audio(voice)
+      voiceEl.volume = Math.max(0, Math.min(1, settings.volume))
+      voiceEl.currentTime = 0
+      const started = voiceEl.play()
+      if (started !== undefined) {
+        void started.catch(() => {
+          // Autoplay policy: the clip plays from the next user gesture onward.
+          trace('音频被浏览器拦截（需要先点击页面）')
+        })
+      }
+    } catch {
+      // Audio is a nicety: a blocked element must not break the pet.
+    }
+  }
 
   /**
    * Play a short two-note chirp.
    *
-   * A synthesised chirp avoids shipping an audio file, keeps the plugin free of
-   * third-party voice samples, and needs no asset route. The context is created
-   * lazily because browsers refuse to start audio before a user gesture.
+   * The fallback used when the package ships no voice clip. A synthesised tone
+   * needs no asset and no route, so it works in any checkout.
    * @returns nothing.
    */
   const chirp = (): void => {
-    if (!settings.sound) return
     try {
       const Ctor = window.AudioContext
         ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -266,6 +301,7 @@ export function mountPet(
   }
 
   // ---- state --------------------------------------------------------------
+  // ---- state --------------------------------------------------------------
 
   const unsubscribe = brain.subscribe((snapshot: PetSnapshot) => {
     play(snapshot.animation)
@@ -282,7 +318,7 @@ export function mountPet(
    */
   const push = (trigger: PetTrigger): void => {
     brain.dispatch(trigger)
-    if (trigger.kind === 'answer-finished' && brain.snapshot().mode === 'reacting') chirp()
+    if (trigger.kind === 'answer-finished' && brain.snapshot().mode === 'reacting') speak()
   }
 
   // ---- diagnostics --------------------------------------------------------

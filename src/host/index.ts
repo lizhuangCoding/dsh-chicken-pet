@@ -162,6 +162,26 @@ function petSettings(config: Config): PetSettings {
 }
 
 /**
+ * Read the packaged completion voice, when one is present.
+ *
+ * The clip is optional: a checkout without it still serves the pet, which then
+ * falls back to its own synthesised chirp.
+ * @returns the MP3 bytes and their content hash, or undefined when absent.
+ */
+function loadVoice(): { bytes: Buffer; hash: string } | undefined {
+  const candidates = [
+    new URL('../../assets/voice.mp3', import.meta.url),
+    new URL('../assets/voice.mp3', import.meta.url),
+  ]
+  for (const url of candidates) {
+    if (!existsSync(fileURLToPath(url))) continue
+    const bytes = readFileSync(fileURLToPath(url))
+    return { bytes, hash: createHash('sha256').update(bytes).digest('hex').slice(0, 16) }
+  }
+  return undefined
+}
+
+/**
  * Register the spritesheet route and publish sheet metadata plus settings.
  *
  * @param ctx - registrant context carrying the web server.
@@ -232,9 +252,34 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.effect(() => () => listeners.clear())
 
+  const voice = loadVoice()
+  const voicePath = '/chicken-pet/voice.mp3'
+  if (config.serveAssets && voice !== undefined) {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'exact',
+      path: voicePath,
+      handler: (req, res) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { Allow: 'GET, HEAD' })
+          res.end()
+          return
+        }
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': String(voice.bytes.length),
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        })
+        if (req.method === 'HEAD') res.end()
+        else res.end(voice.bytes)
+      },
+    }))
+  }
+
   ctx.provide('chickenPetSheet', {
     /** URL the browser loads the sheet from. */
     url: routePath,
+    /** Completion voice URL; absent when the package ships no clip. */
+    voice: voice === undefined ? undefined : `${voicePath}?v=${voice.hash}`,
     /** Content hash used as a cache key. */
     hash: sheet.hash,
     /** Sheet width in pixels. */

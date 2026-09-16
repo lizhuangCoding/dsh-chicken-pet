@@ -20,6 +20,8 @@ export interface SheetInfo {
     cols: number;
     cellWidth: number;
     cellHeight: number;
+    /** Completion voice URL; absent when the package ships no clip. */
+    voice?: string;
     /** Current appearance and behaviour settings, read live. */
     pets?: Partial<Config>;
     /** Subscribe to appearance changes. */

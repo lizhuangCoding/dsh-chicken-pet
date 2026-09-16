@@ -100,28 +100,29 @@ test('the host half registers its route and serves the sheet', async () => {
   }
   host.apply(ctx, host.Config({}))
 
-  assert.equal(routes.length, 1)
-  assert.equal(routes[0].path, '/chicken-pet/spritesheet.png')
+  const sheetRoute = routes.find(route => route.path === '/chicken-pet/spritesheet.png')
+  assert.ok(sheetRoute !== undefined, 'the sprite route must be registered')
+  const sheet = readFileSync(join(root, 'assets', 'spritesheet.png'))
 
   let status
   let headers
   let body
-  routes[0].handler({ method: 'GET' }, {
+  sheetRoute.handler({ method: 'GET' }, {
     writeHead: (s, h) => { status = s; headers = h },
     end: b => { body = b },
   })
   assert.equal(status, 200)
   assert.equal(headers['Content-Type'], 'image/png')
-  assert.equal(body.length, readFileSync(join(root, 'assets', 'spritesheet.png')).length)
+  assert.equal(body.length, sheet.length)
   assert.equal(provided.value.cols, 8)
   assert.equal(provided.value.cellWidth, 192)
 
   let headBody
-  routes[0].handler({ method: 'HEAD' }, { writeHead: () => {}, end: b => { headBody = b } })
+  sheetRoute.handler({ method: 'HEAD' }, { writeHead: () => {}, end: b => { headBody = b } })
   assert.equal(headBody, undefined, 'HEAD must not carry a body')
 
   let postStatus
-  routes[0].handler({ method: 'POST' }, { writeHead: s => { postStatus = s }, end: () => {} })
+  sheetRoute.handler({ method: 'POST' }, { writeHead: s => { postStatus = s }, end: () => {} })
   assert.equal(postStatus, 405)
 })
 
@@ -291,4 +292,85 @@ test('the brain stops scheduling while paused and resumes after', async () => {
   assert.ok(changes > before, 'a resumed pet must schedule again')
 
   brain.dispose()
+})
+
+test('the host serves the completion voice when the package ships one', async () => {
+  const host = await import(join(root, 'lib', 'index.js'))
+  const routes = []
+  let provided
+  const ctx = {
+    effect: fn => fn(),
+    webServer: { register: route => { routes.push(route); return () => {} } },
+    provide: (name, value) => { provided = { name, value } },
+    inject: () => {},
+  }
+  host.apply(ctx, host.Config({}))
+
+  const voice = routes.find(route => route.path === '/chicken-pet/voice.mp3')
+  if (!existsSync(join(root, 'assets', 'voice.mp3'))) {
+    assert.equal(voice, undefined, 'no clip in the package means no route')
+    assert.equal(provided.value.voice, undefined, 'and no URL advertised to the browser')
+    return
+  }
+
+  assert.ok(voice !== undefined, 'the clip the package ships must be served')
+  let status
+  let headers
+  let body
+  voice.handler({ method: 'GET' }, {
+    writeHead: (s, h) => { status = s; headers = h },
+    end: b => { body = b },
+  })
+  assert.equal(status, 200)
+  assert.equal(headers['Content-Type'], 'audio/mpeg')
+  assert.equal(body.length, readFileSync(join(root, 'assets', 'voice.mp3')).length)
+  assert.ok(
+    provided.value.voice?.startsWith('/chicken-pet/voice.mp3'),
+    'the browser half needs the URL, which carries the clip hash for cache invalidation',
+  )
+})
+
+test('the browser half tolerates a package without a clip', () => {
+  // Mount without a host and without any clip route: the pet must still come up,
+  // and the audio path falls back to the synthesised chirp rather than throwing.
+  const registrations = []
+  const globalScope = {
+    __ModuleLoader__: { load: registration => registrations.push(registration) },
+    setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    innerWidth: 1200, innerHeight: 800, localStorage: { getItem: () => null },
+  }
+  globalScope.window = globalScope
+  const nodes = []
+  const element = () => ({
+    style: {}, className: '', appendChild() {}, append() {}, setAttribute() {}, removeAttribute() {},
+    addEventListener() {}, removeEventListener() {}, remove() {}, setPointerCapture() {},
+    releasePointerCapture() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
+  })
+  const documentScope = {
+    createElement: () => { const node = element(); nodes.push(node); return node },
+    head: { appendChild() {} }, body: { appendChild() {} }, getElementById: () => null,
+  }
+  new Function('window', 'document', readFileSync(join(root, 'lib', 'client.js'), 'utf8'))(globalScope, documentScope)
+
+  const stubs = {
+    react: { createElement: (t, p, ...c) => ({ t, p, c }), useState: v => [typeof v === 'function' ? v() : v, () => {}], useEffect: () => {}, useRef: v => ({ current: v }) },
+    '@deepseek-ai/dsh-client-ui-primitives': { Switch: () => ({}), Button: () => ({}), IconChevronDownOutline14: () => ({}) },
+  }
+  const exports = registrations[0].factory(specifier => {
+    if (specifier in stubs) return stubs[specifier]
+    throw new Error(`unexpected require: ${specifier}`)
+  })
+  assert.equal(typeof exports.apply, 'function')
+
+  const ctx = {
+    get: () => undefined,
+    on: () => () => {},
+    effect: fn => fn(),
+    inject: (_deps, callback) => callback({
+      get: () => undefined, on: () => () => {}, effect: fn => fn(),
+    }),
+  }
+  // The assertion is that this call does not throw.
+  exports.apply(ctx, exports.defaultConfig())
+  assert.ok(nodes.length > 0, 'the pet element must be created even without a clip')
 })
