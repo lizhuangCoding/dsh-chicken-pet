@@ -440,17 +440,52 @@ export function ChickenPetCard(props: CardFace & { __open?: boolean }) {
 
   const disabled = !snapshot.writable
 
-  return h('li', { className: 'cdpc', 'data-open': String(open) },
+  return h('li', {
+    className: 'cdpc',
+    'data-open': String(open),
+    style: {
+      listStyle: 'none',
+      border: '0.5px solid var(--dsw-alias-border-l4)',
+      borderRadius: '16px',
+      background: open ? 'var(--dsw-alias-bg-layer-2)' : 'var(--dsw-alias-bg-layer-3)',
+    },
+  },
     h('button', {
       type: 'button',
       className: 'cdpc-head',
+      style: {
+        boxSizing: 'border-box',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '14px 16px',
+        border: 0,
+        background: 'none',
+        font: 'inherit',
+        color: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
+      },
       'aria-expanded': open,
       'aria-label': `${open ? '收起' : '展开'}: 🐔 小鸡桌宠`,
       onClick: () => setOpen(!open),
     },
-      h('span', { className: 'cdpc-headtext' },
-        h('span', { className: 'cdpc-name' }, '🐔 小鸡桌宠'),
-        h('span', { className: 'cdpc-desc' }, '一只会自己找事做的像素鸡，跟着 Agent 的工作状态活动。')),
+      // Inline styles, not classes: the classes are correct but something in the
+      // host page kept them from applying, and the header is the one thing that
+      // must never collapse.
+      h('span', {
+        className: 'cdpc-headtext',
+        style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' },
+      },
+        h('span', {
+          className: 'cdpc-name',
+          style: { fontSize: '15px', fontWeight: 600, lineHeight: 1.4, color: 'var(--dsw-alias-label-primary)' },
+        }, '🐔 小鸡桌宠'),
+        h('span', {
+          className: 'cdpc-desc',
+          style: { fontSize: '13px', lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' },
+        }, '一只会自己找事做的像素鸡，跟着 Agent 的工作状态活动。')),
       dirty ? h('span', { className: 'cdpc-pending' }, '未保存') : null,
       h(Chevron, { className: 'cdpc-chevron' })),
     open

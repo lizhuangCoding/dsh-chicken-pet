@@ -1,6 +1,6 @@
 {
   "name": "dsh-chicken-pet",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "A pixel chicken desktop pet for DeepSeek Harness: it naps, paces, pecks, ruffles its feathers and spins a basketball on its own, and reacts to your agent's work",
   "license": "MIT",
   "type": "module",
