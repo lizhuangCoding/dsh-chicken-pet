@@ -34,7 +34,10 @@ export const name = 'chicken-pet'
  */
 export const inject = []
 
-export { defaultConfig } from './config.ts'
+export { defaultConfig }
+// Exported for the package's own tests: rendering the card in isolation is the
+// only way to catch a props-contract drift without a browser.
+export { ChickenPetCard } from './card.ts'
 export type { Config } from './config.ts'
 
 /**

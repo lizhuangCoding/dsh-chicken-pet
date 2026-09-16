@@ -26,14 +26,33 @@ const stubModules = {
     // would hide a card that dereferences its snapshot on first render.
     useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}],
     useEffect: () => {},
+    useRef: value => ({ current: value }),
   },
   'react/jsx-runtime': { jsx: () => ({}), jsxs: () => ({}), Fragment: {} },
+  // The card draws its controls with the shell's own atoms, so the stub has to
+  // provide them or every control counts as missing.
+  '@deepseek-ai/dsh-client-ui-primitives': {
+    Switch: function Switch(props) { return { type: 'Switch', props, children: [] } },
+    Button: function Button(props) { return { type: 'Button', props, children: [] } },
+  },
 }
 
 /**
  * Execute the bundle against a stubbed loader and return the registration.
  * @returns the object the bundle passed to `__ModuleLoader__.load`.
  */
+/**
+ * Build the plugin exports once, for tests that render the card directly.
+ * @param registration - the loader registration.
+ * @returns the plugin's exported members.
+ */
+function exportsOf(registration) {
+  return registration.factory(specifier => {
+    if (specifier in stubModules) return stubModules[specifier]
+    throw new Error(`bundle required "${specifier}", which the loader table cannot answer`)
+  })
+}
+
 function loadBundle() {
   const registrations = []
   const globalScope = {
@@ -183,4 +202,45 @@ test('the card renders with the props the renderer actually passes', () => {
     JSON.stringify(tree).includes('小鸡桌宠'),
     'the rendered card must carry its title; an empty or crashed tree means the props contract drifted',
   )
+})
+
+test('the card is collapsed until opened, and discloses every control', () => {
+  const registration = loadBundle()
+  const face = {
+    getSnapshot: () => ({
+      status: 'ready',
+      value: { enabled: true, liveliness: 0.75, idleMinSec: 4, idleMaxSec: 12, size: 128, corner: 'bottom-right', sound: true, volume: 0.85 },
+      base: {}, user: {}, revision: 1, writable: true,
+    }),
+    subscribe: () => () => {},
+    set: async () => {},
+    reset: async () => {},
+  }
+
+  /** Collect every node, following createElement's variadic children. */
+  const collect = (node, out = []) => {
+    if (node === null || typeof node !== 'object') return out
+    out.push(node)
+    if (Array.isArray(node.children)) for (const child of node.children) collect(child, out)
+    return out
+  }
+  const count = (nodes, name) => nodes.filter(n => n.type === name || n.type?.name === name).length
+
+  // Collapsed by default: the header renders, the controls do not.
+  const collapsed = collect(exportsOf(registration).ChickenPetCard(face))
+  assert.equal(count(collapsed, 'Switch'), 0, 'a collapsed card must not render its controls')
+  assert.ok(
+    JSON.stringify(collapsed).includes('小鸡桌宠'),
+    'the header must name the plugin even while collapsed',
+  )
+
+  // Opened: every control the groups declare is present.
+  const open = collect(exportsOf(registration).ChickenPetCard({ ...face, __open: true }))
+  assert.equal(count(open, 'Switch'), 2, 'two toggles')
+  assert.equal(open.filter(n => n.props?.type === 'range').length, 2, 'two sliders')
+  assert.equal(open.filter(n => n.props?.type === 'number').length, 3, 'three number inputs')
+  assert.equal(count(open, 'Button'), 2, 'discard and save')
+  for (const group of ['显示', '活跃度', '声音']) {
+    assert.ok(JSON.stringify(open).includes(group), `the ${group} group must render`)
+  }
 })

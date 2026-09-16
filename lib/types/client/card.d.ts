@@ -5,13 +5,20 @@
  * that namespace, so registering here is what puts the pet's options in the
  * interface instead of leaving users to edit `cordis.patch.yml` by hand.
  *
- * The card renders with `React.createElement` rather than JSX so the build
- * needs no JSX transform: this package is built by its own scripts, and adding
- * a compiler for one component would be more machinery than the component is
- * worth. The element tree is identical either way.
+ * The card follows the same shape as the ones DSH ships: a header that names
+ * the plugin and discloses its controls in place, a chevron that turns over
+ * when open, a pending marker that survives collapsing, and a footer with
+ * discard and save. Edits are staged locally and written on save rather than
+ * committed on every keystroke, so a slider drag is one write instead of fifty.
  *
- * A card must ship its own chrome, staging, and revision fencing; the settings
- * section deliberately exposes no shared field components to outside packages.
+ * Two constraints come from the browser shell rather than from taste:
+ *
+ * - Only its platform modules resolve, so this card may require `react` and
+ *   `@deepseek-ai/dsh-client-ui-primitives` and nothing else. `clsx` is not on
+ *   that list; class names are composed with plain string joins.
+ * - The inject face is spread onto props, not nested under `inject`. The face's
+ *   `hooks` compartment becomes `use<Name>` and every other member lands at the
+ *   top level, which is why a shipped card writes `props.save`.
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Config } from './config.ts';
@@ -22,8 +29,8 @@ import type { Config } from './config.ts';
  * not depend on a host package. The page pairs the two by this name alone.
  */
 export declare const SETTINGS_NAMESPACE = "chicken-pet";
-/** The shape of the live settings section the card reads. */
-interface ScopeSnapshot {
+/** The shape of the live settings section. */
+export interface ScopeSnapshot {
     status: 'loading' | 'ready' | 'unavailable';
     value: Partial<Config> | undefined;
     base: unknown;
@@ -31,24 +38,7 @@ interface ScopeSnapshot {
     revision: number | undefined;
     writable: boolean;
 }
-/** The settings scope the card edits, as this plugin uses it. */
-interface SettingsScope {
-    getSnapshot(): ScopeSnapshot;
-    subscribe(listener: () => void): () => void;
-    set(field: string, value: unknown): Promise<void>;
-    unset(field: string): Promise<void>;
-}
-/**
- * Props the renderer passes to the card component.
- *
- * The inject face is spread onto the props object rather than nested under a
- * named field: the renderer turns the face's `hooks` compartment into
- * `use<Name>` hooks and copies every other member to the top level. Reading
- * `props.inject` therefore yields `undefined` and the card renders with a
- * TypeError.
- */
-type CardProps = CardFace;
-/** What the card's registration injects into the component. */
+/** What the card's registration injects, spread onto props by the renderer. */
 export interface CardFace {
     /** Live scope snapshot. */
     getSnapshot(): ScopeSnapshot;
@@ -61,12 +51,14 @@ export interface CardFace {
 }
 /**
  * Render the pet's settings card.
- * @param props - the injected face.
- * @returns the card's element tree.
+ * @param props - the injected face, spread onto props by the renderer.
+ * @returns the card element.
  */
-export declare function ChickenPetCard(props: CardProps): import("react").DetailedReactHTMLElement<{
+export declare function ChickenPetCard(props: CardFace & {
+    __open?: boolean;
+}): import("react").DetailedReactHTMLElement<{
     className: string;
-}, HTMLElement>;
+}, HTMLElement> | null;
 /**
  * Register the card with the settings page.
  *
@@ -74,5 +66,9 @@ export declare function ChickenPetCard(props: CardProps): import("react").Detail
  * @param scope - the bound scope for this plugin's settings namespace.
  * @returns nothing.
  */
-export declare function installCard(ctx: Context, scope: SettingsScope): void;
-export {};
+export declare function installCard(ctx: Context, scope: {
+    getSnapshot(): ScopeSnapshot;
+    subscribe(listener: () => void): () => void;
+    set(field: string, value: unknown): Promise<void>;
+    unset(field: string): Promise<void>;
+}): void;

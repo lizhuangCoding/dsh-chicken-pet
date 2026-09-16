@@ -162,13 +162,22 @@ function toFactoryBody(source, file) {
         : specifier
       deps.push({ key, isRelative: specifier.startsWith('.'), specifier, file })
       const local = `__re_${reExports.length}`
+      const bindings = []
       for (const part of names.split(',')) {
         const trimmed = part.trim()
         if (trimmed === '') continue
         const [orig, alias] = trimmed.split(/\s+as\s+/).map(t => t.trim())
+        // Bind the name into this module's scope as well as forwarding it. The
+        // emitted export list references the bare identifier, so a re-export
+        // that only forwards leaves that name undefined at runtime.
+        // `orig` is the exported name; bind it under that same name so the
+        // emitted export list can reference it. A renamed re-export
+        // (`export { a as b }`) forwards through `reExports`, not here.
+        bindings.push(orig)
         reExports.push(alias === undefined ? orig : `${orig}: ${alias}`)
       }
-      return `const ${local} = __require(${JSON.stringify(key)});`
+      const destructure = bindings.length > 0 ? ` const { ${bindings.join(', ')} } = ${local};` : ''
+      return `const ${local} = __require(${JSON.stringify(key)});${destructure}`
     },
   )
 

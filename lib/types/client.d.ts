@@ -11,7 +11,7 @@
  * back to its own defaults.
  */
 import type { Context } from '@deepseek-ai/cordis';
-import { type Config } from './config.ts';
+import { defaultConfig, type Config } from './config.ts';
 /** Stable Cordis plugin name. */
 export declare const name = "chicken-pet";
 /**
@@ -28,7 +28,8 @@ export declare const name = "chicken-pet";
  * literally named `optional` and the plugin waits forever.
  */
 export declare const inject: never[];
-export { defaultConfig } from './config.ts';
+export { defaultConfig };
+export { ChickenPetCard } from './card.ts';
 export type { Config } from './config.ts';
 /**
  * Mount the pet and register its settings card.
